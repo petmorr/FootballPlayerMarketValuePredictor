@@ -1,12 +1,22 @@
+import logging
 import os
-import pandas as pd
 from pathlib import Path
 
-# Define paths
-RAW_DATA_FOLDER = './data/raw'
-CLEANED_DATA_FOLDER = './data/cleaned'
+import pandas as pd
 
-# Ensure the cleaned folder exists
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.FileHandler("preprocessing.log", mode="a"),
+        logging.StreamHandler()
+    ]
+)
+
+# Define paths
+RAW_DATA_FOLDER = './data/scraped'
+CLEANED_DATA_FOLDER = './data/cleaned'
 os.makedirs(CLEANED_DATA_FOLDER, exist_ok=True)
 
 # Country code to full name mapping
@@ -48,7 +58,7 @@ COUNTRY_CODE_MAPPING = {
     'N/A': 'Not Available',  # Explicit mapping for missing codes
 }
 
-# Validation Schema
+# Expected columns for validation
 EXPECTED_COLUMNS = [
     'Rank', 'Player', 'Country Code', 'Country', 'Position', 'Squad',
     'Age', 'Born', 'Matches Played', 'Starts', 'Minutes Played', '90s Played',
@@ -62,16 +72,28 @@ EXPECTED_COLUMNS = [
     'xG + xAG per 90', 'Non-Penalty xG per 90', 'Non-Penalty xG + xAG per 90'
 ]
 
-def preprocess_file(file_path, league, season):
+
+def preprocess_file(file_path: str, league: str, season: str) -> None:
     """
-    Preprocess a raw CSV file from FBref.
+    Preprocess a raw CSV file and save the cleaned version.
+
+    Args:
+        file_path (str): Path to the raw CSV file.
+        league (str): League name (e.g., 'Bundesliga').
+        season (str): Season year (e.g., '2019-2020').
+
+    Returns:
+        None
     """
     try:
-        df = pd.read_csv(file_path, header=[0, 1])  # Read multi-level headers
-        df.columns = ['_'.join(filter(None, col)).strip() for col in df.columns.values]  # Flatten column headers
-        df.dropna(axis=1, how='all', inplace=True)  # Drop empty columns
-        df.dropna(how='all', inplace=True)  # Drop empty rows
-        df = df[df[df.columns[0]] != 'Rk']  # Remove repeated headers
+        logging.info(f"Processing file: {file_path}")
+
+        # Read and flatten multi-level headers
+        df = pd.read_csv(file_path, header=[0, 1])
+        df.columns = ['_'.join(filter(None, col)).strip() for col in df.columns.values]
+        df.dropna(axis=1, how='all', inplace=True)
+        df.dropna(how='all', inplace=True)
+        df = df[df[df.columns[0]] != 'Rk']
         df.reset_index(drop=True, inplace=True)
 
         # Rename columns
@@ -122,39 +144,49 @@ def preprocess_file(file_path, league, season):
             df['Country'] = df['Country Code'].map(COUNTRY_CODE_MAPPING).fillna('Not Available')
             df.drop(columns=['Nation'], inplace=True)
 
+        # Add league and season columns
         df['League'] = league
         df['Season'] = season
-
-        # Reorder columns
-        df = df[EXPECTED_COLUMNS + ['League', 'Season']]
 
         # Validate column schema
         missing_columns = set(EXPECTED_COLUMNS) - set(df.columns)
         if missing_columns:
-            raise ValueError(f"Missing columns in {file_path}: {missing_columns}")
+            logging.error(f"Missing columns in {file_path}: {missing_columns}")
+            return
 
-        # Export as both CSV and Parquet
+        # Reorder columns
+        df = df[EXPECTED_COLUMNS + ['League', 'Season']]
+
+        # Save cleaned data
         cleaned_file_base = os.path.join(CLEANED_DATA_FOLDER, f"cleaned_{league}_{season}")
         df.to_csv(f"{cleaned_file_base}.csv", index=False)
+        logging.info(f"Cleaned file saved to: {cleaned_file_base}.csv")
 
-        print(f"Processed and saved {file_path}")
     except Exception as e:
-        print(f"Error processing file {file_path}: {e}")
+        logging.error(f"Error processing file {file_path}: {e}")
 
-def process_all_files(input_folder, output_folder):
+
+def process_all_files(input_folder: str, output_folder: str) -> None:
+    """
+    Process all CSV files in the input folder and save cleaned versions.
+
+    Args:
+        input_folder (str): Path to the raw data folder.
+        output_folder (str): Path to save cleaned data.
+
+    Returns:
+        None
+    """
     for file_name in os.listdir(input_folder):
         if file_name.endswith('.csv'):
-            # Extract league and season from file name
             try:
                 league, season = Path(file_name).stem.split('_')[:2]
+                file_path = os.path.join(input_folder, file_name)
+                logging.info(f"Starting processing for {file_name}")
+                preprocess_file(file_path, league, season)
             except ValueError:
-                print(f"Invalid file name format: {file_name}")
+                logging.warning(f"Invalid file name format: {file_name}")
                 continue
 
-            file_path = os.path.join(input_folder, file_name)
-            print(f"Processing {file_name}...")
-            preprocess_file(file_path, league, season)
-
-# Run the script
 if __name__ == "__main__":
     process_all_files(RAW_DATA_FOLDER, CLEANED_DATA_FOLDER)
