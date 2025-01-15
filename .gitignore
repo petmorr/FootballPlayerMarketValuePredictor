@@ -1,4 +1,6 @@
 # created by virtualenv automatically
 .venv/
-.data/
-.logging/
+data/
+logging/
+.idea
+transfermarkt-api/
