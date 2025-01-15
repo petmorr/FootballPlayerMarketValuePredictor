@@ -9,7 +9,10 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 from webdriver_manager.chrome import ChromeDriverManager
 
-import logging
+from logging_config import configure_logger
+
+# Configure logger for web_scrape
+logging = configure_logger("web_scrape", "web_scrape.log")
 
 # Constants
 LEAGUES = {
@@ -21,17 +24,7 @@ LEAGUES = {
 }
 SEASONS = ["2023-2024", "2022-2023", "2021-2022", "2020-2021", "2019-2020"]
 OUTPUT_DIR = "data/scraped"
-LOG_DIR = "./logging"
-LOG_FILE = os.path.join(LOG_DIR, "web_scrape_log.txt")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
-os.makedirs(LOG_DIR, exist_ok=True)
-
-# Configure logging
-logging.basicConfig(
-    filename=LOG_FILE,
-    level=logging.DEBUG,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-)
 
 def configure_driver() -> webdriver.Chrome:
     """

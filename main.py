@@ -8,7 +8,6 @@ SCRIPTS = [
     "player_value.py"  # Script to add market values to the preprocessed data
 ]
 
-
 def execute_script(script_name):
     """
     Execute a Python script using subprocess.
@@ -35,7 +34,6 @@ def execute_script(script_name):
     except Exception as e:
         print(f"An error occurred while executing {script_name}: {e}")
 
-
 def main():
     """
     Main function to execute all scripts sequentially.
@@ -50,7 +48,6 @@ def main():
             print(f"An unexpected error occurred: {e}")
 
     print("All scripts have been executed.")
-
 
 if __name__ == "__main__":
     main()

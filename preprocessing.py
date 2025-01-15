@@ -3,17 +3,10 @@ from pathlib import Path
 
 import pandas as pd
 
-import logging
+from logging_config import configure_logger
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.FileHandler("logging/preprocessing.log", mode="a"),
-        logging.StreamHandler()
-    ]
-)
+# Configure logger
+logging = configure_logger("preprocessing", "preprocessing.log")
 
 # Define paths
 RAW_DATA_FOLDER = './data/scraped'

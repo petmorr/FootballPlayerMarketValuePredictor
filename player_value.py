@@ -5,17 +5,10 @@ from typing import Optional, List, Dict
 import requests
 from retrying import retry
 
-import logging
+from logging_config import configure_logger
 
-# Setup logging
-LOG_DIR = "./logging"
-LOG_FILE = os.path.join(LOG_DIR, "player_value_log.txt")
-os.makedirs(LOG_DIR, exist_ok=True)
-logging.basicConfig(
-    filename=LOG_FILE,
-    level=logging.DEBUG,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-)
+# Configure logger for player_value
+logging = configure_logger("player_value", "player_value.log")
 
 # API Configuration
 API_BASE_URL = "http://localhost:8000"
