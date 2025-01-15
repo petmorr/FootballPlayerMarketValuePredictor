@@ -1,15 +1,16 @@
-import logging
 import os
 from pathlib import Path
 
 import pandas as pd
+
+import logging
 
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
     handlers=[
-        logging.FileHandler("preprocessing.log", mode="a"),
+        logging.FileHandler("logging/preprocessing.log", mode="a"),
         logging.StreamHandler()
     ]
 )

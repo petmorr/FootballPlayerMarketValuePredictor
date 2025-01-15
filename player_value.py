@@ -1,4 +1,3 @@
-import logging
 import os
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict
@@ -6,8 +5,12 @@ from typing import Optional, List, Dict
 import requests
 from retrying import retry
 
-# Configure logging
-LOG_FILE = "player_value.log"
+import logging
+
+# Setup logging
+LOG_DIR = "./logging"
+LOG_FILE = os.path.join(LOG_DIR, "player_value_log.txt")
+os.makedirs(LOG_DIR, exist_ok=True)
 logging.basicConfig(
     filename=LOG_FILE,
     level=logging.DEBUG,
@@ -19,7 +22,6 @@ API_BASE_URL = "http://localhost:8000"
 
 # Constants
 DATE_FORMAT = "%Y-%m-%d"
-
 
 # Retry logic for API calls
 @retry(
@@ -49,7 +51,6 @@ def make_request(endpoint: str, params: Optional[Dict] = None) -> Dict:
         logging.error(f"Error making API call to {url}: {e}")
         raise
 
-
 def search_player(player_name: str) -> List[Dict]:
     """
     Search for a player using the Transfermarkt API.
@@ -68,7 +69,6 @@ def search_player(player_name: str) -> List[Dict]:
         logging.error(f"Error searching for player '{player_name}': {e}")
         return []
 
-
 def fetch_player_market_value(player_id: str) -> List[Dict]:
     """
     Fetch market value history for a given player.
@@ -86,7 +86,6 @@ def fetch_player_market_value(player_id: str) -> List[Dict]:
     except Exception as e:
         logging.error(f"Error fetching market value for player ID {player_id}: {e}")
         return []
-
 
 def validate_market_value(
         market_values: List[Dict],
@@ -120,7 +119,6 @@ def validate_market_value(
             f"No valid market value match for team '{team_name}' within {date_buffer} days of {target_date}."
         )
     return closest_value
-
 
 def process_player_values(file_path: str, season_end_year: int) -> None:
     """
@@ -164,7 +162,6 @@ def process_player_values(file_path: str, season_end_year: int) -> None:
     df.to_csv(output_path, index=False)
     logging.info(f"Updated dataset saved to {output_path}")
 
-
 def process_all_files(input_folder: str, season_end_years: Dict[str, int]) -> None:
     """
     Process all files in the input folder and add market values to player datasets.
@@ -176,8 +173,6 @@ def process_all_files(input_folder: str, season_end_years: Dict[str, int]) -> No
     Returns:
         None
     """
-    import os
-
     for file_name, season_end_year in season_end_years.items():
         file_path = os.path.join(input_folder, file_name)
         if os.path.isfile(file_path):
