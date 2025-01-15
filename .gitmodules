@@ -1,0 +1,3 @@
+[submodule "transfermarkt-api"]
+	path = transfermarkt-api
+	url = https://github.com/felipeall/transfermarkt-api
