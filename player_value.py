@@ -1,9 +1,11 @@
 import os
-from datetime import datetime, timedelta
+import time
+from datetime import datetime
 from typing import Optional, List, Dict
 
+import pandas as pd
 import requests
-from retrying import retry
+from rapidfuzz.fuzz import partial_ratio
 
 from logging_config import configure_logger
 
@@ -16,16 +18,10 @@ API_BASE_URL = "http://localhost:8000"
 # Constants
 DATE_FORMAT = "%Y-%m-%d"
 
-# Retry logic for API calls
-@retry(
-    retry_on_exception=lambda e: isinstance(e, requests.RequestException),
-    wait_exponential_multiplier=1000,
-    wait_exponential_max=10000,
-    stop_max_attempt_number=5,
-)
-def make_request(endpoint: str, params: Optional[Dict] = None) -> Dict:
+
+def make_request_with_infinite_retry(endpoint: str, params: Optional[Dict] = None) -> Dict:
     """
-    Make a GET request to the API with retry logic.
+    Make a GET request to the API with infinite retry logic.
 
     Args:
         endpoint (str): The API endpoint to call.
@@ -35,36 +31,22 @@ def make_request(endpoint: str, params: Optional[Dict] = None) -> Dict:
         Dict: JSON response from the API.
     """
     url = f"{API_BASE_URL}/{endpoint}"
-    try:
-        response = requests.get(url, params=params, timeout=10)
-        response.raise_for_status()
-        logging.debug(f"Successful API call: {url}")
-        return response.json()
-    except requests.RequestException as e:
-        logging.error(f"Error making API call to {url}: {e}")
-        raise
+    attempt = 0
+    while True:
+        attempt += 1
+        try:
+            response = requests.get(url, params=params, timeout=10)
+            response.raise_for_status()
+            logging.debug(f"Successful API call on attempt {attempt}: {url}")
+            return response.json()
+        except requests.RequestException as e:
+            logging.warning(f"Retrying API call to {url} (attempt {attempt}): {e}")
+            time.sleep(min(2 ** attempt, 60))
 
-def search_player(player_name: str) -> List[Dict]:
+
+def fetch_player_market_value_with_retry(player_id: str) -> Optional[List[Dict]]:
     """
-    Search for a player using the Transfermarkt API.
-
-    Args:
-        player_name (str): The player's name.
-
-    Returns:
-        List[Dict]: A list of player search results.
-    """
-    try:
-        data = make_request(f"players/search/{player_name}")
-        logging.info(f"API response for player search '{player_name}': {data}")
-        return data.get("results", [])
-    except Exception as e:
-        logging.error(f"Error searching for player '{player_name}': {e}")
-        return []
-
-def fetch_player_market_value(player_id: str) -> List[Dict]:
-    """
-    Fetch market value history for a given player.
+    Fetch market value history for a player with infinite retry.
 
     Args:
         player_id (str): The player's unique ID.
@@ -72,46 +54,48 @@ def fetch_player_market_value(player_id: str) -> List[Dict]:
     Returns:
         List[Dict]: Market value history for the player.
     """
-    try:
-        data = make_request(f"players/{player_id}/market_value")
-        logging.info(f"Market value history fetched for player ID {player_id}.")
-        return data.get("marketValueHistory", [])
-    except Exception as e:
-        logging.error(f"Error fetching market value for player ID {player_id}: {e}")
-        return []
+    endpoint = f"players/{player_id}/market_value"
+    logging.info(f"Fetching market value for player ID {player_id} with retry logic.")
+    return make_request_with_infinite_retry(endpoint).get("marketValueHistory", [])
 
 def validate_market_value(
-        market_values: List[Dict],
-        team_name: str,
-        target_date: datetime,
-        date_buffer: int = 60,
-) -> Optional[int]:
+        market_values: List[Dict], team_name: str, season_start: datetime, season_end: datetime
+) -> Optional[Dict]:
     """
-    Validate market value based on team and target date.
+    Validate market value based on team and season using fuzzy matching.
 
     Args:
         market_values (List[Dict]): Market value history for the player.
         team_name (str): The name of the team to validate against.
-        target_date (datetime): The target date for market value.
-        date_buffer (int): The date range buffer in days (default: 60).
+        season_start (datetime): Start date of the season.
+        season_end (datetime): End date of the season.
 
     Returns:
-        Optional[int]: The market value if a valid match is found, else None.
+        Optional[Dict]: The closest market value entry to the end of the season if a valid match is found, else None.
     """
-    closest_value = None
+    closest_entry = None
+    closest_date_diff = float("inf")
+
     for entry in market_values:
-        value_date = datetime.strptime(entry["date"], DATE_FORMAT)
-        if abs(value_date - target_date) <= timedelta(days=date_buffer):
-            if entry["clubName"].lower() == team_name.lower():
-                logging.info(
-                    f"Match found: {entry['clubName']} on {value_date} with value {entry['marketValue']}"
+        try:
+            value_date = datetime.strptime(entry["date"], DATE_FORMAT)
+            club_name = entry.get("clubName", "")
+            match_score = partial_ratio(team_name.lower(), club_name.lower())
+
+            if season_start <= value_date <= season_end and match_score >= 80:
+                date_diff = abs((value_date - season_end).days)
+                if date_diff < closest_date_diff:
+                    closest_date_diff = date_diff
+                    closest_entry = entry
+                logging.debug(
+                    f"Fuzzy match score: {match_score} for '{team_name}' vs '{club_name}' on {value_date}"
                 )
-                closest_value = entry["marketValue"]
-    if closest_value is None:
-        logging.warning(
-            f"No valid market value match for team '{team_name}' within {date_buffer} days of {target_date}."
-        )
-    return closest_value
+        except Exception as e:
+            logging.error(f"Error processing market value entry: {e}")
+
+    if not closest_entry:
+        logging.warning(f"No valid market value match for '{team_name}' in the season.")
+    return closest_entry
 
 def process_player_values(file_path: str, season_end_year: int) -> None:
     """
@@ -121,9 +105,9 @@ def process_player_values(file_path: str, season_end_year: int) -> None:
         file_path (str): Path to the player dataset file.
         season_end_year (int): The season's end year.
     """
-    import pandas as pd
+    season_start = datetime.strptime(f"{season_end_year - 1}-07-01", DATE_FORMAT)
+    season_end = datetime.strptime(f"{season_end_year}-06-30", DATE_FORMAT)
 
-    target_date = datetime.strptime(f"{season_end_year}-05-31", DATE_FORMAT)
     df = pd.read_csv(file_path)
     df["Market Value"] = None
 
@@ -133,25 +117,32 @@ def process_player_values(file_path: str, season_end_year: int) -> None:
 
         logging.info(f"Processing player: {player_name} (Team: {team_name})")
 
-        search_results = search_player(player_name)
+        search_results = make_request_with_infinite_retry(f"players/search/{player_name}").get("results", [])
         if not search_results:
             logging.warning(f"No search results found for {player_name}.")
             continue
 
-        best_match = search_results[0]
-        player_id = best_match.get("id")
+        valid_player = None
+        for result in search_results:
+            if partial_ratio(player_name.lower(), result["name"].lower()) >= 75:
+                market_values = fetch_player_market_value_with_retry(result["id"])
+                if market_values:
+                    closest_entry = validate_market_value(market_values, team_name, season_start, season_end)
+                    if closest_entry:
+                        valid_player = result
+                        df.at[index, "Market Value"] = closest_entry["marketValue"]
+                        logging.info(
+                            f"Assigned market value {closest_entry['marketValue']} "
+                            f"for {player_name} (Team: {team_name}) from date {closest_entry['date']}."
+                        )
+                        break
 
-        market_values = fetch_player_market_value(player_id)
-        if not market_values:
-            logging.warning(f"No market value history for player ID {player_id}.")
-            continue
+        if not valid_player:
+            logging.warning(f"No suitable match found for {player_name} (Team: {team_name}).")
 
-        value = validate_market_value(market_values, team_name, target_date)
-        df.at[index, "Market Value"] = value or "N/A"
-
-    output_path = os.path.join(
-        os.path.dirname(file_path), f"updated_{os.path.basename(file_path)}"
-    )
+    output_dir = "./data/updated"
+    os.makedirs(output_dir, exist_ok=True)
+    output_path = os.path.join(output_dir, f"updated_{os.path.basename(file_path)}")
     df.to_csv(output_path, index=False)
     logging.info(f"Updated dataset saved to {output_path}")
 
@@ -169,54 +160,48 @@ def process_all_files(input_folder: str, season_end_years: Dict[str, int]) -> No
     for file_name, season_end_year in season_end_years.items():
         file_path = os.path.join(input_folder, file_name)
         if os.path.isfile(file_path):
-            logging.info(f"Processing file: {file_name} for season ending {season_end_year}.")
+            logging.info(f"Processing file: {file_path} for season ending {season_end_year}.")
             try:
                 process_player_values(file_path, season_end_year)
-                logging.info(f"Successfully processed {file_name}.")
+                logging.info(f"Successfully processed {file_path}.")
             except Exception as e:
-                logging.error(f"Error processing file {file_name}: {e}")
+                logging.error(f"Error processing file {file_path}: {e}")
         else:
             logging.warning(f"File {file_path} does not exist. Skipping.")
 
 if __name__ == "__main__":
     INPUT_FOLDER = "./data/cleaned"
     SEASON_END_YEARS = {
-        # Bundesliga
-        "cleaned_Bundesliga_2019-2020_player_data.csv": 2020,
-        "cleaned_Bundesliga_2020-2021_player_data.csv": 2021,
-        "cleaned_Bundesliga_2021-2022_player_data.csv": 2022,
-        "cleaned_Bundesliga_2022-2023_player_data.csv": 2023,
-        "cleaned_Bundesliga_2023-2024_player_data.csv": 2024,
-        # La Liga
-        "cleaned_La-Liga_2019-2020_player_data.csv": 2020,
-        "cleaned_La-Liga_2020-2021_player_data.csv": 2021,
-        "cleaned_La-Liga_2021-2022_player_data.csv": 2022,
-        "cleaned_La-Liga_2022-2023_player_data.csv": 2023,
-        "cleaned_La-Liga_2023-2024_player_data.csv": 2024,
-        # Ligue 1
-        "cleaned_Ligue-1_2019-2020_player_data.csv": 2020,
-        "cleaned_Ligue-1_2020-2021_player_data.csv": 2021,
-        "cleaned_Ligue-1_2021-2022_player_data.csv": 2022,
-        "cleaned_Ligue-1_2022-2023_player_data.csv": 2023,
-        "cleaned_Ligue-1_2023-2024_player_data.csv": 2024,
-        # Premier League
-        "cleaned_Premier-League_2019-2020_player_data.csv": 2020,
-        "cleaned_Premier-League_2020-2021_player_data.csv": 2021,
-        "cleaned_Premier-League_2021-2022_player_data.csv": 2022,
-        "cleaned_Premier-League_2022-2023_player_data.csv": 2023,
-        "cleaned_Premier-League_2023-2024_player_data.csv": 2024,
-        # Serie A
-        "cleaned_Serie-A_2019-2020_player_data.csv": 2020,
-        "cleaned_Serie-A_2020-2021_player_data.csv": 2021,
-        "cleaned_Serie-A_2021-2022_player_data.csv": 2022,
-        "cleaned_Serie-A_2022-2023_player_data.csv": 2023,
-        "cleaned_Serie-A_2023-2024_player_data.csv": 2024,
+        "cleaned_Bundesliga_2019-2020.csv": 2020,
+        "cleaned_Bundesliga_2020-2021.csv": 2021,
+        "cleaned_Bundesliga_2021-2022.csv": 2022,
+        "cleaned_Bundesliga_2022-2023.csv": 2023,
+        "cleaned_Bundesliga_2023-2024.csv": 2024,
+        "cleaned_La-Liga_2019-2020.csv": 2020,
+        "cleaned_La-Liga_2020-2021.csv": 2021,
+        "cleaned_La-Liga_2021-2022.csv": 2022,
+        "cleaned_La-Liga_2022-2023.csv": 2023,
+        "cleaned_La-Liga_2023-2024.csv": 2024,
+        "cleaned_Ligue-1_2019-2020.csv": 2020,
+        "cleaned_Ligue-1_2020-2021.csv": 2021,
+        "cleaned_Ligue-1_2021-2022.csv": 2022,
+        "cleaned_Ligue-1_2022-2023.csv": 2023,
+        "cleaned_Ligue-1_2023-2024.csv": 2024,
+        "cleaned_Premier-League_2019-2020.csv": 2020,
+        "cleaned_Premier-League_2020-2021.csv": 2021,
+        "cleaned_Premier-League_2021-2022.csv": 2022,
+        "cleaned_Premier-League_2022-2023.csv": 2023,
+        "cleaned_Premier-League_2023-2024.csv": 2024,
+        "cleaned_Serie-A_2019-2020.csv": 2020,
+        "cleaned_Serie-A_2020-2021.csv": 2021,
+        "cleaned_Serie-A_2021-2022.csv": 2022,
+        "cleaned_Serie-A_2022-2023.csv": 2023,
+        "cleaned_Serie-A_2023-2024.csv": 2024,
     }
 
-    # Ensure the input folder exists
     if not os.path.isdir(INPUT_FOLDER):
         logging.error(f"Input folder '{INPUT_FOLDER}' does not exist. Please verify the path.")
     else:
-        logging.info(f"Starting processing of files in {INPUT_FOLDER}...")
+        logging.info("Starting processing of player values...")
         process_all_files(INPUT_FOLDER, SEASON_END_YEARS)
         logging.info("Processing complete.")
