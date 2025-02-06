@@ -1,6 +1,7 @@
 import os
 import re
 import time
+from datetime import datetime
 from typing import Optional, List, Dict
 
 import pandas as pd
@@ -158,6 +159,48 @@ def process_player(player_name: str) -> Optional[List[Dict]]:
     return market_values
 
 
+def validate_market_value(
+        market_values: List[Dict], team_name: str, season_start: datetime, season_end: datetime
+) -> Optional[Dict]:
+    """
+    Matches a market value entry based on team and season using fuzzy logic.
+
+    Args:
+        market_values (List[Dict]): Market value history for the player.
+        team_name (str): The name of the team to validate against.
+        season_start (datetime): Start date of the season.
+        season_end (datetime): End date of the season.
+
+    Returns:
+        Optional[Dict]: The closest market value entry to the season end date, or None if not found.
+    """
+    closest_entry = None
+    closest_date_diff = float("inf")
+
+    for entry in market_values:
+        try:
+            value_date = datetime.strptime(entry["date"], DATE_FORMAT)
+            club_name = entry.get("clubName", "")
+            match_score = partial_ratio(team_name.lower(), club_name.lower())
+
+            # Ensure the entry falls within the season range and has a strong fuzzy match
+            if season_start <= value_date <= season_end and match_score >= 80:
+                date_diff = abs((value_date - season_end).days)
+                if date_diff < closest_date_diff:
+                    closest_date_diff = date_diff
+                    closest_entry = entry
+                logging.debug(
+                    f"Fuzzy match score: {match_score} for '{team_name}' vs '{club_name}' on {value_date}"
+                )
+        except Exception as e:
+            logging.error(f"Error processing market value entry: {e}")
+
+    if not closest_entry:
+        logging.warning(f"No valid market value match for '{team_name}' in the season.")
+    return closest_entry
+
+
+
 def process_player_values(file_path: str, season_end_year: int) -> None:
     """ Processes a dataset and updates each player's market value. """
     df = pd.read_csv(file_path)
@@ -165,15 +208,37 @@ def process_player_values(file_path: str, season_end_year: int) -> None:
 
     for index, row in df.iterrows():
         player_name = row["Player"]
-        logging.info(f"Processing player: {player_name}")
+        team_name = row["Squad"]
 
-        market_values = process_player(player_name)
+        logging.info(f"Processing player: {player_name} (Team: {team_name})")
 
+        # Fetch Player ID
+        player_id = fetch_player_id(player_name)
+        if not player_id:
+            logging.warning(f"No Player ID found for {player_name}. Skipping.")
+            continue
+
+        # Fetch Market Value
+        market_values = fetch_player_market_value(player_id)
+        if not market_values:
+            logging.warning(f"No API market value found for {player_name}, using Selenium fallback.")
+            market_values = process_player(player_name)
+
+        # Validate Market Value
         if market_values:
-            latest_value = market_values[-1]["market_value"]
-            df.at[index, "Market Value"] = latest_value
-            logging.info(f"Assigned Market Value {latest_value} for {player_name}")
+            closest_entry = validate_market_value(market_values, team_name,
+                                                  datetime.strptime(f"{season_end_year - 1}-07-01", DATE_FORMAT),
+                                                  datetime.strptime(f"{season_end_year}-06-30", DATE_FORMAT))
+            if closest_entry and "marketValue" in closest_entry:
+                df.at[index, "Market Value"] = closest_entry["marketValue"]
+                logging.info(f"Assigned Market Value {closest_entry['marketValue']} "
+                             f"for {player_name} (Team: {team_name}) from date {closest_entry['date']}.")
+            else:
+                logging.warning(f"No suitable market value found for {player_name} (Team: {team_name}).")
+        else:
+            logging.warning(f"No market value data available for {player_name} (Team: {team_name}).")
 
+    # Save updated dataset
     output_dir = "./data/updated"
     os.makedirs(output_dir, exist_ok=True)
     output_path = os.path.join(output_dir, f"updated_{os.path.basename(file_path)}")
