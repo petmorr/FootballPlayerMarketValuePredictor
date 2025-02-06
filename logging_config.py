@@ -1,4 +1,5 @@
 import os
+import sys
 
 import logging
 
@@ -9,7 +10,7 @@ os.makedirs(LOG_DIR, exist_ok=True)
 
 def configure_logger(name: str, log_file: str, level: int = logging.DEBUG) -> logging.Logger:
     """
-    Configure and return a logger instance.
+    Configure and return a logger instance with UTF-8 encoding support.
 
     Args:
         name (str): Name of the logger.
@@ -23,14 +24,14 @@ def configure_logger(name: str, log_file: str, level: int = logging.DEBUG) -> lo
     logger = logging.getLogger(name)
     logger.setLevel(level)
 
-    # File handler
-    file_handler = logging.FileHandler(log_file_path, mode="a")
+    # File handler with UTF-16 encoding
+    file_handler = logging.FileHandler(log_file_path, mode="a", encoding="utf-16")
     file_handler.setLevel(level)
     file_formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
     file_handler.setFormatter(file_formatter)
 
-    # Stream handler (console output)
-    stream_handler = logging.StreamHandler()
+    # Stream handler (console output) - force UTF-8 output
+    stream_handler = logging.StreamHandler(sys.stdout)
     stream_handler.setLevel(level)
     stream_handler.setFormatter(file_formatter)
 
