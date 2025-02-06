@@ -91,42 +91,161 @@ def setup_driver() -> webdriver.Chrome:
     return webdriver.Chrome(service=service, options=options)
 
 
-def extract_market_value_from_graph(driver: webdriver.Chrome) -> List[Dict]:
-    """ Extracts market value data from the Transfermarkt graph using Selenium. """
-    market_data = []
+def handle_accept_and_continue(driver):
+    """Clicks the 'Accept & Continue' modal if it appears."""
     try:
-        logging.info("Waiting for the market value graph to load...")
-        time.sleep(10)
+        logging.info("Checking for 'Accept & Continue' modal...")
+        iframes = driver.find_elements(By.TAG_NAME, "iframe")
+        for iframe in iframes:
+            if iframe.get_attribute("id") == "sp_message_iframe_953778":
+                driver.switch_to.frame(iframe)
+                btn = WebDriverWait(driver, 20).until(
+                    EC.element_to_be_clickable((By.XPATH, "//button[@title='Accept & continue']"))
+                )
+                btn.click()
+                logging.info("'Accept & Continue' button clicked.")
+                break
+    except Exception as e:
+        logging.warning(f"Error handling cookie modal: {e}")
+    finally:
+        driver.switch_to.default_content()
 
+
+def get_graph_container(driver):
+    """
+    Waits up to 60 seconds for the market–value graph container element
+    (<tm-market-value-development-graph-integrated>) to appear and be loaded.
+    Uses the working approach from `test.py`.
+    """
+    try:
         graph = WebDriverWait(driver, 60).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "tm-market-value-development-graph-integrated"))
         )
         driver.execute_script("arguments[0].scrollIntoView(true);", graph)
-        time.sleep(5)
+        WebDriverWait(driver, 60).until(lambda d: len(graph.get_attribute("innerHTML").strip()) > 0)
+        logging.info("Graph container is present and loaded.")
+        return graph
+    except Exception as e:
+        logging.error(f"Error getting graph container: {e}")
+        logging.info("Scrolling to bottom and waiting 10 seconds...")
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        time.sleep(10)
+        try:
+            graph = WebDriverWait(driver, 30).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "tm-market-value-development-graph-integrated"))
+            )
+            driver.execute_script("arguments[0].scrollIntoView(true);", graph)
+            WebDriverWait(driver, 30).until(lambda d: len(graph.get_attribute("innerHTML").strip()) > 0)
+            logging.info("Graph container found after scrolling.")
+            return graph
+        except Exception as e2:
+            logging.error(f"Error getting graph container after scrolling: {e2}")
+            return None
 
-        voronoi_cells = driver.find_elements(By.CSS_SELECTOR, "path.voronoi-cell.svelte-1plgtdf")
-        logging.info(f"Found {len(voronoi_cells)} voronoi cell elements.")
 
-        if not voronoi_cells:
-            logging.error("No voronoi cells found! Page structure may have changed.")
+def parse_tooltip(tooltip_text):
+    """
+    Parses tooltip text expected in the format:
+      "Dec 15, 2014
+       Market value: €250k
+       Club: FC Winterthur
+       Age: 19"
+
+    Returns a dictionary with:
+      - date: datetime object (from the first line)
+      - raw_date: original date string
+      - market_value: extracted value
+      - full_text: original tooltip text
+    """
+    lines = tooltip_text.split("\n")
+    if len(lines) < 2:
+        return None
+
+    # Extract date
+    date_str = lines[0].strip()
+    try:
+        date_obj = datetime.strptime(date_str, "%b %d, %Y")  # Example: Dec 15, 2014
+    except ValueError as e:
+        logging.error(f"Error parsing date from '{date_str}': {e}")
+        return None
+
+    # Extract market value
+    market_value = None
+    for line in lines:
+        if "Market value:" in line:
+            market_value = line.split("Market value:")[1].strip()
+            break  # Stop searching once market value is found
+
+    return {
+        "date": date_obj,
+        "raw_date": date_str,
+        "market_value": market_value,
+        "full_text": tooltip_text
+    }
+
+
+def extract_market_value_from_graph(driver):
+    """
+    Extracts market value data by hovering over the voronoi-cell path elements that overlay the graph.
+    Uses the same working approach from `test.py`.
+    """
+    market_data = []
+    try:
+        logging.info("Waiting for the market value graph to load...")
+        graph = get_graph_container(driver)
+        if not graph:
+            logging.error("Graph container not found.")
+            return market_data
+
+        # Wait for the voronoi cells to be present
+        voronoi_cells = WebDriverWait(driver, 30).until(
+            EC.presence_of_all_elements_located((By.CSS_SELECTOR, "path.voronoi-cell.svelte-1plgtdf"))
+        )
+        num_cells = len(voronoi_cells)
+        logging.info(f"Found {num_cells} voronoi cell elements in the graph.")
+
+        if num_cells == 0:
+            logging.error("No voronoi cell elements found; the page structure may have changed.")
             return market_data
 
         action = ActionChains(driver)
-        for cell in voronoi_cells:
-            action.move_to_element(cell).perform()
-            time.sleep(1)
-            try:
-                tooltip = WebDriverWait(driver, 4).until(
-                    EC.visibility_of_element_located((By.CSS_SELECTOR, "div.chart-tooltip"))
-                )
-                tooltip_text = tooltip.text.strip()
-                if tooltip_text:
-                    date_str, value = tooltip_text.split("\n")[:2]
-                    market_data.append({"date": date_str, "market_value": value})
-            except TimeoutException:
-                logging.warning("Tooltip did not appear for one of the voronoi cells.")
+        seen_dates = set()
+
+        # Iterate over each voronoi cell element
+        for index, cell in enumerate(voronoi_cells):
+            tooltip_text = None
+            for attempt in range(3):  # Retry hovering up to 3 times
+                try:
+                    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", cell)
+                    action.move_to_element(cell).perform()
+                    logging.info(f"Hovered over voronoi cell {index + 1}/{num_cells} (Attempt {attempt + 1}).")
+                    time.sleep(0.8)  # Adjust time to allow tooltip to appear
+                    tooltip = WebDriverWait(driver, 4).until(
+                        EC.visibility_of_element_located((By.CSS_SELECTOR, "div.chart-tooltip"))
+                    )
+                    tooltip_text = tooltip.text.strip()
+                    if tooltip_text:
+                        break
+                except TimeoutException:
+                    logging.warning(f"Tooltip not found for cell {index + 1} (Attempt {attempt + 1}).")
+                except Exception as e:
+                    logging.error(f"Error hovering over cell {index + 1}: {e}")
+            if tooltip_text:
+                rec = parse_tooltip(tooltip_text)  # Ensure we use parse_tooltip()
+                if rec and rec["raw_date"] not in seen_dates:
+                    seen_dates.add(rec["raw_date"])
+                    market_data.append(rec)
+                    logging.info(f"Extracted tooltip for cell {index + 1}: {rec}")
+                else:
+                    logging.info(f"Duplicate or invalid tooltip for cell {index + 1} skipped.")
+            else:
+                logging.warning(f"No tooltip extracted for cell {index + 1}.")
+        logging.info(f"Final extracted market data: {market_data}")
+    except TimeoutException:
+        logging.error("Timeout while waiting for the market value graph or tooltip elements.")
     except Exception as e:
-        logging.error(f"Error extracting market value from graph: {e}")
+        logging.error(f"Error extracting market data: {e}")
+
     return market_data
 
 
@@ -149,7 +268,12 @@ def process_player(player_name: str) -> Optional[List[Dict]]:
         driver = setup_driver()
         try:
             driver.get(profile_url)
-            time.sleep(10)
+            time.sleep(5)  # Allow time for the page to load
+
+            # ✅ Handle cookie modal before proceeding
+            handle_accept_and_continue(driver)
+
+            # ✅ Extract market values using Selenium
             market_values = extract_market_value_from_graph(driver)
         except Exception as e:
             logging.error(f"Error processing {player_name} with Selenium: {e}")
