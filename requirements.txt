@@ -1,0 +1,9 @@
+# Core libraries used across the project
+pandas==1.5.3          # For data manipulation
+requests==2.31.0       # For HTTP API requests
+rapidfuzz==2.13.7      # For fuzzy matching (partial_ratio)
+selenium==4.10.0       # For web scraping
+webdriver-manager==3.8.6 # For managing WebDriver versions
+
+# Logging configuration and retry support
+retrying==1.3.4        # For retrying failed API calls
