@@ -2,7 +2,7 @@ import os
 import re
 import time
 from datetime import datetime
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 
 import pandas as pd
 import requests
@@ -18,19 +18,32 @@ from webdriver_manager.chrome import ChromeDriverManager
 
 from logging_config import configure_logger
 
-# Configure logger
+# ------------------------------------------------------------------------------
+# Logger and API Configuration
+# ------------------------------------------------------------------------------
 logging = configure_logger("player_value", "player_value.log")
 
-# API Configuration
-API_BASE_URL = "http://localhost:8000"
-
-# Constants
-DATE_FORMAT = "%Y-%m-%d"
-MAX_API_RETRIES = 3
+API_BASE_URL: str = "http://localhost:8000"
+DATE_FORMAT: str = "%Y-%m-%d"
+MAX_API_RETRIES: int = 3
 
 
-def make_request_with_retry(endpoint: str, params: Optional[Dict] = None) -> Dict:
-    """ Makes a GET request to the API with a max of 3 retries. """
+# ------------------------------------------------------------------------------
+# API Request Functions
+# ------------------------------------------------------------------------------
+
+def make_request_with_retry(endpoint: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """
+    Makes a GET request to the API endpoint with a maximum of MAX_API_RETRIES retries.
+
+    Args:
+        endpoint (str): The API endpoint (relative to the base URL).
+        params (Optional[Dict[str, Any]]): Optional query parameters.
+
+    Returns:
+        Dict[str, Any]: The JSON response parsed into a dictionary.
+                        Returns an empty dictionary if all retries fail.
+    """
     url = f"{API_BASE_URL}/{endpoint}"
     for attempt in range(1, MAX_API_RETRIES + 1):
         try:
@@ -45,7 +58,17 @@ def make_request_with_retry(endpoint: str, params: Optional[Dict] = None) -> Dic
 
 
 def fetch_player_id(player_name: str) -> Optional[str]:
-    """ Searches for a player by name and retrieves their Player ID. """
+    """
+    Searches for a player by name via the API and retrieves the best-matched Player ID.
+
+    Uses fuzzy matching (partial_ratio) to determine the best match among the search results.
+
+    Args:
+        player_name (str): The player's name to search for.
+
+    Returns:
+        Optional[str]: The best matched player's ID or None if no suitable match is found.
+    """
     endpoint = f"players/search/{player_name}"
     logging.info(f"Searching for Player ID for {player_name}.")
     search_results = make_request_with_retry(endpoint).get("results", [])
@@ -54,7 +77,11 @@ def fetch_player_id(player_name: str) -> Optional[str]:
         logging.warning(f"No search results found for {player_name}.")
         return None
 
-    best_match = max(search_results, key=lambda r: partial_ratio(player_name.lower(), r["name"].lower()), default=None)
+    best_match = max(
+        search_results,
+        key=lambda r: partial_ratio(player_name.lower(), r["name"].lower()),
+        default=None
+    )
 
     if best_match:
         logging.info(f"Found Player ID {best_match['id']} for {player_name}.")
@@ -65,45 +92,76 @@ def fetch_player_id(player_name: str) -> Optional[str]:
 
 
 def fetch_player_profile(player_id: str) -> Optional[str]:
-    """ Fetches the player's Transfermarkt profile URL using their ID. """
+    """
+    Fetches the player's profile URL (e.g., Transfermarkt profile) using their Player ID.
+
+    Args:
+        player_id (str): The player's unique identifier.
+
+    Returns:
+        Optional[str]: The profile URL if found; otherwise, None.
+    """
     endpoint = f"players/{player_id}/profile"
     logging.info(f"Fetching profile URL for player ID {player_id}.")
     data = make_request_with_retry(endpoint)
     return data.get("url", None)
 
 
-def fetch_player_market_value(player_id: str) -> Optional[List[Dict]]:
-    """ Fetches market value history for a player using the API. """
+def fetch_player_market_value(player_id: str) -> Optional[List[Dict[str, Any]]]:
+    """
+    Retrieves the market value history for a player from the API using their Player ID.
+
+    Args:
+        player_id (str): The player's unique identifier.
+
+    Returns:
+        Optional[List[Dict[str, Any]]]: A list of market value history entries,
+                                        or an empty list if not found.
+    """
     endpoint = f"players/{player_id}/market_value"
     logging.info(f"Fetching market value for player ID {player_id}.")
     return make_request_with_retry(endpoint).get("marketValueHistory", [])
 
 
+# ------------------------------------------------------------------------------
+# Selenium Driver Setup and Helper Functions
+# ------------------------------------------------------------------------------
+
 def setup_driver() -> webdriver.Chrome:
-    """ Sets up Selenium Chrome WebDriver in headless mode. """
+    """
+    Sets up and returns a Selenium Chrome WebDriver in headless mode.
+
+    The driver is configured with options for headless operation, a fixed window size,
+    and necessary performance options.
+
+    Returns:
+        webdriver.Chrome: The configured Chrome WebDriver instance.
+    """
     options = Options()
     options.add_argument("--headless=new")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--no-sandbox")
-    # Set a fixed window size to help ensure consistent rendering.
     options.add_argument("--window-size=1280,800")
     service = Service(ChromeDriverManager().install())
     return webdriver.Chrome(service=service, options=options)
 
 
-def handle_accept_and_continue(driver):
-    """Handles the 'Accept & Continue' modal if it appears, checking both iframe and direct modal cases."""
+def handle_accept_and_continue(driver: webdriver.Chrome) -> None:
+    """
+    Handles the 'Accept & Continue' modal (often a cookie consent) if it appears.
+
+    This function first checks for an iframe-based modal, then for a direct modal in the document.
+    Ensures that the WebDriver always returns to the main document context.
+    """
     try:
         logging.info("Checking for 'Accept & Continue' modal...")
-
-        # === First, try handling the iframe version ===
+        # --- Check for the modal inside iframes ---
         iframes = driver.find_elements(By.TAG_NAME, "iframe")
         for iframe in iframes:
             iframe_id = iframe.get_attribute("id")
-            if "sp_message_iframe" in iframe_id:  # Matches any iframe containing this pattern
+            if "sp_message_iframe" in iframe_id:  # Matches pattern in the iframe ID
                 logging.info(f"Switching to iframe: {iframe_id}")
                 driver.switch_to.frame(iframe)
-
                 try:
                     btn = WebDriverWait(driver, 10).until(
                         EC.element_to_be_clickable((By.XPATH, "//button[contains(@title, 'Accept & continue')]"))
@@ -111,43 +169,48 @@ def handle_accept_and_continue(driver):
                     btn.click()
                     logging.info("'Accept & Continue' button clicked inside iframe.")
                     driver.switch_to.default_content()
-                    return  # Exit function after handling modal
+                    return
                 except Exception as e:
                     logging.warning(f"Error clicking button inside iframe: {e}")
+                driver.switch_to.default_content()
 
-                driver.switch_to.default_content()  # Ensure we switch back
-
-        # === If no iframe found, try handling modal directly in the document ===
+        # --- If no iframe modal is found, try handling the modal directly ---
         logging.info("Checking for modal directly in the document...")
         try:
             modal = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.ID, "notice"))  # The modal <div id="notice">
+                EC.presence_of_element_located((By.ID, "notice"))
             )
             accept_button = modal.find_element(By.XPATH, ".//button[contains(@title, 'Accept & continue')]")
             accept_button.click()
             logging.info("'Accept & Continue' button clicked inside modal.")
         except Exception as e:
             logging.warning(f"Error clicking button inside modal: {e}")
-
     except Exception as e:
         logging.warning(f"Error handling cookie modal: {e}")
-
     finally:
-        driver.switch_to.default_content()  # Ensure we always switch back to main document
+        driver.switch_to.default_content()
 
 
-def get_graph_container(driver):
+def get_graph_container(driver: webdriver.Chrome) -> Optional[Any]:
     """
-    Waits up to 60 seconds for the market–value graph container element
-    (<tm-market-value-development-graph-integrated>) to appear and be loaded.
-    If not immediately found, scrolls down and retries.
+    Waits for the market value graph container element to be present and loaded.
+
+    The element is identified by its CSS selector. If not immediately found,
+    the function scrolls to the bottom and retries.
+
+    Args:
+        driver (webdriver.Chrome): The Selenium WebDriver instance.
+
+    Returns:
+        Optional[Any]: The graph container WebElement if found; otherwise, None.
     """
     try:
         graph = WebDriverWait(driver, 60).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "tm-market-value-development-graph-integrated"))
+            EC.presence_of_element_located(
+                (By.CSS_SELECTOR, "tm-market-value-development-graph-integrated")
+            )
         )
         driver.execute_script("arguments[0].scrollIntoView(true);", graph)
-        # Wait until the innerHTML is non‑empty (i.e. the Svelte component has rendered)
         WebDriverWait(driver, 60).until(lambda d: len(graph.get_attribute("innerHTML").strip()) > 0)
         logging.info("Graph container is present and loaded.")
         return graph
@@ -158,7 +221,9 @@ def get_graph_container(driver):
         time.sleep(10)
         try:
             graph = WebDriverWait(driver, 30).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "tm-market-value-development-graph-integrated"))
+                EC.presence_of_element_located(
+                    (By.CSS_SELECTOR, "tm-market-value-development-graph-integrated")
+                )
             )
             driver.execute_script("arguments[0].scrollIntoView(true);", graph)
             WebDriverWait(driver, 30).until(lambda d: len(graph.get_attribute("innerHTML").strip()) > 0)
@@ -169,30 +234,42 @@ def get_graph_container(driver):
             return None
 
 
-def parse_tooltip(tooltip_text):
-    """
-    Parses tooltip text expected in the format:
+# ------------------------------------------------------------------------------
+# Tooltip Parsing and Market Value Extraction
+# ------------------------------------------------------------------------------
 
+def parse_tooltip(tooltip_text: str) -> Optional[Dict[str, Any]]:
+    """
+    Parses tooltip text containing market value information.
+
+    Expected format:
       "Dec 15, 2014
        Market value: €250k
        Club: FC Winterthur
        Age: 19"
 
-    Returns a dictionary with:
-      - date: datetime object (from the first line)
-      - raw_date: original date string
-      - market_value: market value string
-      - full_text: full tooltip text
+    Args:
+        tooltip_text (str): The full text from the tooltip.
+
+    Returns:
+        Optional[Dict[str, Any]]: A dictionary with parsed data including:
+            - date: datetime object
+            - raw_date: original date string
+            - market_value: extracted market value string
+            - full_text: complete tooltip text
+        Returns None if parsing fails.
     """
     lines = tooltip_text.split("\n")
     if len(lines) < 2:
         return None
+
     date_str = lines[0].strip()
     try:
         date_obj = datetime.strptime(date_str, "%b %d, %Y")
     except Exception as e:
         logging.error(f"Error parsing date from '{date_str}': {e}")
         return None
+
     market_value = None
     if len(lines) >= 2:
         parts = lines[1].split("Market value:")
@@ -200,6 +277,7 @@ def parse_tooltip(tooltip_text):
             market_value = parts[1].strip()
         else:
             market_value = lines[1].strip()
+
     return {
         "date": date_obj,
         "raw_date": date_str,
@@ -208,12 +286,20 @@ def parse_tooltip(tooltip_text):
     }
 
 
-def extract_market_value_from_graph(driver):
+def extract_market_value_from_graph(driver: webdriver.Chrome) -> List[str]:
     """
-    Extracts market value data by hovering over the voronoi-cell path elements.
-    Uses multiple techniques to ensure all tooltips are captured.
+    Extracts market value tooltips by hovering over voronoi-cell elements in the graph.
+
+    Uses JavaScript-triggered hover events to ensure the tooltip appears and then
+    collects the tooltip text. Duplicate entries based on the raw date are skipped.
+
+    Args:
+        driver (webdriver.Chrome): The Selenium WebDriver instance.
+
+    Returns:
+        List[str]: A list of tooltip texts representing market value data.
     """
-    market_data = []
+    market_data: List[str] = []
     try:
         logging.info("Waiting for the market value graph to load...")
         graph = get_graph_container(driver)
@@ -222,7 +308,9 @@ def extract_market_value_from_graph(driver):
             return market_data
 
         voronoi_cells = WebDriverWait(driver, 30).until(
-            EC.presence_of_all_elements_located((By.CSS_SELECTOR, "path.voronoi-cell.svelte-1plgtdf"))
+            EC.presence_of_all_elements_located(
+                (By.CSS_SELECTOR, "path.voronoi-cell.svelte-1plgtdf")
+            )
         )
         num_cells = len(voronoi_cells)
         logging.info(f"Found {num_cells} voronoi cell elements in the graph.")
@@ -230,31 +318,28 @@ def extract_market_value_from_graph(driver):
         seen_dates = set()
 
         for index, cell in enumerate(voronoi_cells):
-            tooltip_text = None
+            tooltip_text: Optional[str] = None
 
-            for attempt in range(4):  # Try multiple times
+            # Try up to 4 attempts to trigger and capture the tooltip
+            for attempt in range(4):
                 try:
-                    # Ensure the element is visible
                     driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", cell)
                     time.sleep(0.5)
-
-                    # **Use JavaScript to trigger hover (more reliable than ActionChains)**
+                    # Trigger hover using JavaScript
                     driver.execute_script(
                         "var evt = document.createEvent('MouseEvents');"
                         "evt.initMouseEvent('mouseover', true, true, window, 0, 0, 0, 0, 0, false, false, false, false, 0, null);"
                         "arguments[0].dispatchEvent(evt);", cell
                     )
-
                     logging.info(f"Hovered over voronoi cell {index + 1}/{num_cells} (Attempt {attempt + 1}).")
-                    time.sleep(1.5)  # Give tooltip enough time to appear
+                    time.sleep(1.5)  # Allow tooltip time to appear
 
                     tooltip = WebDriverWait(driver, 3).until(
                         EC.visibility_of_element_located((By.CSS_SELECTOR, "div.chart-tooltip"))
                     )
                     tooltip_text = tooltip.text.strip()
                     if tooltip_text:
-                        break  # Stop trying once tooltip is found
-
+                        break
                 except TimeoutException:
                     logging.warning(f"Tooltip not found for cell {index + 1} (Attempt {attempt + 1}).")
                 except Exception as e:
@@ -280,8 +365,23 @@ def extract_market_value_from_graph(driver):
     return market_data
 
 
-def process_player(player_name: str) -> Optional[List[Dict]]:
-    """ Retrieves player ID, then fetches market value from API or Selenium. """
+# ------------------------------------------------------------------------------
+# Player Processing and Market Value Validation
+# ------------------------------------------------------------------------------
+
+def process_player(player_name: str) -> Optional[List[Dict[str, Any]]]:
+    """
+    Processes a player by retrieving their Player ID and then fetching their market value data.
+
+    It first attempts to fetch data via the API. If no data is returned, it uses Selenium as a fallback
+    to extract market values from the player's profile.
+
+    Args:
+        player_name (str): The player's name.
+
+    Returns:
+        Optional[List[Dict[str, Any]]]: A list of market value history entries, or None if processing fails.
+    """
     player_id = fetch_player_id(player_name)
     if not player_id:
         logging.warning(f"Could not determine Player ID for {player_name}. Skipping.")
@@ -299,13 +399,12 @@ def process_player(player_name: str) -> Optional[List[Dict]]:
         driver = setup_driver()
         try:
             driver.get(profile_url)
-            time.sleep(5)  # Allow time for the page to load
-
-            # ✅ Handle cookie modal before proceeding
+            time.sleep(5)  # Allow the page to load fully
             handle_accept_and_continue(driver)
-
-            # ✅ Extract market values using Selenium
-            market_values = extract_market_value_from_graph(driver)
+            # Extract market value tooltips using Selenium fallback
+            tooltip_texts = extract_market_value_from_graph(driver)
+            # Convert tooltip texts into structured data (if desired, you can parse them further)
+            market_values = [parse_tooltip(text) for text in tooltip_texts if parse_tooltip(text)]
         except Exception as e:
             logging.error(f"Error processing {player_name} with Selenium: {e}")
         finally:
@@ -315,19 +414,25 @@ def process_player(player_name: str) -> Optional[List[Dict]]:
 
 
 def validate_market_value(
-        market_values: List[Dict], team_name: str, season_start: datetime, season_end: datetime
-) -> Optional[Dict]:
+        market_values: List[Dict[str, Any]],
+        team_name: str,
+        season_start: datetime,
+        season_end: datetime
+) -> Optional[Dict[str, Any]]:
     """
-    Matches a market value entry based on team and season using fuzzy logic.
+    Validates and matches a market value entry for a player based on team and season information.
+
+    Uses fuzzy logic to compare the team name in the market value entry with the expected team name,
+    and selects the entry closest to the season end date.
 
     Args:
-        market_values (List[Dict]): Market value history for the player.
-        team_name (str): The name of the team to validate against.
-        season_start (datetime): Start date of the season.
-        season_end (datetime): End date of the season.
+        market_values (List[Dict[str, Any]]): Market value history for the player.
+        team_name (str): The team name to validate against.
+        season_start (datetime): The season start date.
+        season_end (datetime): The season end date.
 
     Returns:
-        Optional[Dict]: The closest market value entry to the season end date, or None if not found.
+        Optional[Dict[str, Any]]: The matched market value entry, or None if no suitable match is found.
     """
     closest_entry = None
     closest_date_diff = float("inf")
@@ -338,7 +443,6 @@ def validate_market_value(
             club_name = entry.get("clubName", "")
             match_score = partial_ratio(team_name.lower(), club_name.lower())
 
-            # Ensure the entry falls within the season range and has a strong fuzzy match
             if season_start <= value_date <= season_end and match_score >= 80:
                 date_diff = abs((value_date - season_end).days)
                 if date_diff < closest_date_diff:
@@ -355,9 +459,24 @@ def validate_market_value(
     return closest_entry
 
 
+# ------------------------------------------------------------------------------
+# Data Processing Functions
+# ------------------------------------------------------------------------------
 
 def process_player_values(file_path: str, season_end_year: int) -> None:
-    """ Processes a dataset and updates each player's market value. """
+    """
+    Processes a CSV dataset to update each player's market value.
+
+    For each player, this function:
+      - Retrieves the player's market value history via API (or Selenium fallback).
+      - Validates the market value for the specified season.
+      - Updates the dataset with the market value.
+      - Saves the updated dataset to a new CSV file.
+
+    Args:
+        file_path (str): Path to the CSV file.
+        season_end_year (int): The season end year used for date range calculations.
+    """
     df = pd.read_csv(file_path)
     df["Market Value"] = None
 
@@ -367,33 +486,34 @@ def process_player_values(file_path: str, season_end_year: int) -> None:
 
         logging.info(f"Processing player: {player_name} (Team: {team_name})")
 
-        # Fetch Player ID
+        # Retrieve Player ID and market value history.
         player_id = fetch_player_id(player_name)
         if not player_id:
             logging.warning(f"No Player ID found for {player_name}. Skipping.")
             continue
 
-        # Fetch Market Value
         market_values = fetch_player_market_value(player_id)
         if not market_values:
             logging.warning(f"No API market value found for {player_name}, using Selenium fallback.")
             market_values = process_player(player_name)
 
-        # Validate Market Value
+        # Validate and select the market value entry based on season dates.
         if market_values:
-            closest_entry = validate_market_value(market_values, team_name,
-                                                  datetime.strptime(f"{season_end_year - 1}-07-01", DATE_FORMAT),
-                                                  datetime.strptime(f"{season_end_year}-06-30", DATE_FORMAT))
+            season_start = datetime.strptime(f"{season_end_year - 1}-07-01", DATE_FORMAT)
+            season_end = datetime.strptime(f"{season_end_year}-06-30", DATE_FORMAT)
+            closest_entry = validate_market_value(market_values, team_name, season_start, season_end)
             if closest_entry and "marketValue" in closest_entry:
                 df.at[index, "Market Value"] = closest_entry["marketValue"]
-                logging.info(f"Assigned Market Value {closest_entry['marketValue']} "
-                             f"for {player_name} (Team: {team_name}) from date {closest_entry['date']}.")
+                logging.info(
+                    f"Assigned Market Value {closest_entry['marketValue']} for {player_name} "
+                    f"(Team: {team_name}) from date {closest_entry['date']}."
+                )
             else:
                 logging.warning(f"No suitable market value found for {player_name} (Team: {team_name}).")
         else:
             logging.warning(f"No market value data available for {player_name} (Team: {team_name}).")
 
-    # Save updated dataset
+    # Save the updated dataset.
     output_dir = "./data/updated"
     os.makedirs(output_dir, exist_ok=True)
     output_path = os.path.join(output_dir, f"updated_{os.path.basename(file_path)}")
@@ -402,7 +522,16 @@ def process_player_values(file_path: str, season_end_year: int) -> None:
 
 
 def process_all_files(input_folder: str, season_end_years: Dict[str, int]) -> None:
-    """ Processes all CSV files in the input folder. """
+    """
+    Processes all CSV files in the input folder.
+
+    For each file, the function determines the season end year (from a provided mapping),
+    processes the file to update player market values, and logs the progress.
+
+    Args:
+        input_folder (str): Path to the folder containing CSV files.
+        season_end_years (Dict[str, int]): A dictionary mapping file names to season end years.
+    """
     for file_name, season_end_year in season_end_years.items():
         file_path = os.path.join(input_folder, file_name)
         if os.path.isfile(file_path):
@@ -416,35 +545,48 @@ def process_all_files(input_folder: str, season_end_years: Dict[str, int]) -> No
 
 def extract_season_year(file_name: str) -> Optional[int]:
     """
-    Extracts the season end year from the file name using regex.
+    Extracts the season end year from the file name using regular expressions.
+
+    The expected file name format includes a season in the format "YYYY-YYYY".
 
     Args:
         file_name (str): The name of the file.
 
     Returns:
-        Optional[int]: The extracted season end year, or None if not found.
+        Optional[int]: The season end year (the second year in the range) if found; otherwise, None.
     """
     match = re.search(r"(\d{4})-(\d{4})", file_name)
     if match:
-        return int(match.group(2))  # Extract the second year as the season end year
+        return int(match.group(2))
     return None
 
 
-def main():
+# ------------------------------------------------------------------------------
+# Main Execution Function
+# ------------------------------------------------------------------------------
+
+def main() -> None:
+    """
+    Main function to process player market value updates for all cleaned datasets.
+
+    It checks for the input folder, iterates over the files, extracts season information,
+    processes each file, and logs the overall progress.
+    """
     INPUT_FOLDER = "./data/cleaned"
 
     if not os.path.isdir(INPUT_FOLDER):
         logging.error(f"Input folder '{INPUT_FOLDER}' does not exist.")
-    else:
-        logging.info("Starting processing of player values...")
-        for file in os.listdir(INPUT_FOLDER):
-            season_end_year = extract_season_year(file)
-            if season_end_year:
-                logging.info(f"Processing {file} for season ending {season_end_year}")
-                process_player_values(os.path.join(INPUT_FOLDER, file), season_end_year)
-            else:
-                logging.warning(f"Skipping {file}: Could not determine season year.")
-        logging.info("Processing complete.")
+        return
+
+    logging.info("Starting processing of player values...")
+    for file in os.listdir(INPUT_FOLDER):
+        season_end_year = extract_season_year(file)
+        if season_end_year:
+            logging.info(f"Processing {file} for season ending {season_end_year}")
+            process_player_values(os.path.join(INPUT_FOLDER, file), season_end_year)
+        else:
+            logging.warning(f"Skipping {file}: Could not determine season year.")
+    logging.info("Processing complete.")
 
 
 if __name__ == "__main__":

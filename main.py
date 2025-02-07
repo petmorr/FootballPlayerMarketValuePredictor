@@ -1,53 +1,100 @@
 import os
 import subprocess
 
-# Define the scripts to be executed in sequence
+import logging
+
+# ------------------------------------------------------------------------------
+# Logging Setup
+# ------------------------------------------------------------------------------
+# Configure the logger. You can replace this basic configuration with your own
+# (e.g., using a custom configure_logger function if available).
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
+logger = logging.getLogger(__name__)
+
+# ------------------------------------------------------------------------------
+# Scripts to Execute
+# ------------------------------------------------------------------------------
+# Define the list of Python scripts to be executed sequentially.
 SCRIPTS = [
-    "web_scrape.py",  # Script to scrape player data
-    "preprocessing.py",  # Script to preprocess scraped data
-    "player_value.py"  # Script to add market values to the preprocessed data
+    "web_scrape.py",  # Script to scrape player data.
+    "preprocessing.py",  # Script to preprocess scraped data.
+    "player_value.py"  # Script to add market values to the preprocessed data.
 ]
 
-def execute_script(script_name):
+
+# ------------------------------------------------------------------------------
+# Function: execute_script
+# ------------------------------------------------------------------------------
+def execute_script(script_name: str) -> None:
     """
     Execute a Python script using subprocess.
+
+    This function constructs the full path to the script, checks whether the file exists,
+    and then runs the script using the system's Python interpreter. The output and errors
+    are captured and logged accordingly.
 
     Args:
         script_name (str): Name of the Python script to execute.
 
     Raises:
-        FileNotFoundError: If the script is not found.
+        FileNotFoundError: If the script is not found in the current directory.
     """
+    # Construct the absolute path of the script.
     script_path = os.path.join(os.getcwd(), script_name)
+
+    # Verify that the script exists.
     if not os.path.isfile(script_path):
-        raise FileNotFoundError(f"Script {script_name} not found in the current directory.")
+        raise FileNotFoundError(f"Script '{script_name}' not found in the current directory: {os.getcwd()}")
 
     try:
-        print(f"Executing {script_name}...")
-        result = subprocess.run(["python", script_name], capture_output=True, text=True)
+        logger.info(f"Executing script: {script_name}")
+        # Run the script using subprocess and capture its output.
+        result = subprocess.run(
+            ["python", script_path],
+            capture_output=True,
+            text=True
+        )
 
-        # Log the output and errors
+        # Check if the script executed successfully.
         if result.returncode == 0:
-            print(f"{script_name} completed successfully.\nOutput:\n{result.stdout}")
+            logger.info(f"Script '{script_name}' completed successfully.")
+            logger.debug(f"Output:\n{result.stdout}")
         else:
-            print(f"{script_name} encountered an error.\nError:\n{result.stderr}")
+            logger.error(f"Script '{script_name}' encountered an error (Return code: {result.returncode}).")
+            logger.error(f"Error output:\n{result.stderr}")
     except Exception as e:
-        print(f"An error occurred while executing {script_name}: {e}")
+        logger.exception(f"An error occurred while executing '{script_name}': {e}")
 
-def main():
+
+# ------------------------------------------------------------------------------
+# Function: main
+# ------------------------------------------------------------------------------
+def main() -> None:
     """
     Main function to execute all scripts sequentially.
+
+    Iterates over the list of scripts and executes each one using the execute_script function.
+    If a script is not found or an error occurs during its execution, the error is logged,
+    and the script continues with the next file.
     """
-    print("Starting the execution of all scripts...")
+    logger.info("Starting the execution of all scripts...")
     for script in SCRIPTS:
         try:
             execute_script(script)
         except FileNotFoundError as fnf_error:
-            print(fnf_error)
+            logger.error(fnf_error)
         except Exception as e:
-            print(f"An unexpected error occurred: {e}")
+            logger.exception(f"An unexpected error occurred while processing '{script}': {e}")
 
-    print("All scripts have been executed.")
+    logger.info("All scripts have been executed.")
 
+
+# ------------------------------------------------------------------------------
+# Script Entry Point
+# ------------------------------------------------------------------------------
 if __name__ == "__main__":
     main()
