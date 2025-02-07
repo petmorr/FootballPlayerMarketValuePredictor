@@ -15,7 +15,7 @@ from logging_config import configure_logger
 # Logger Configuration
 # ------------------------------------------------------------------------------
 # Configure a logger for the web scraping process.
-logging = configure_logger("web_scrape", "web_scrape.log")
+logging = configure_logger("web_scrape", "logging/web_scrape.log")
 
 # ------------------------------------------------------------------------------
 # Constants & Configuration

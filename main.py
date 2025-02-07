@@ -1,19 +1,14 @@
 import os
 import subprocess
 
-import logging
+from logging_config import configure_logger
 
 # ------------------------------------------------------------------------------
 # Logging Setup
 # ------------------------------------------------------------------------------
 # Configure the logger. You can replace this basic configuration with your own
 # (e.g., using a custom configure_logger function if available).
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S"
-)
-logger = logging.getLogger(__name__)
+logger = configure_logger("main", "logging/main.log")
 
 # ------------------------------------------------------------------------------
 # Scripts to Execute

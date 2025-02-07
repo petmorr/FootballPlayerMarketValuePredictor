@@ -21,7 +21,7 @@ from logging_config import configure_logger
 # ------------------------------------------------------------------------------
 # Logger and API Configuration
 # ------------------------------------------------------------------------------
-logging = configure_logger("player_value", "player_value.log")
+logging = configure_logger("player_value", "logging/player_value.log")
 
 API_BASE_URL: str = "http://localhost:8000"
 DATE_FORMAT: str = "%Y-%m-%d"
