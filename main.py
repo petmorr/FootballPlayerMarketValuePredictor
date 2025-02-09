@@ -8,7 +8,7 @@ from logging_config import configure_logger
 # ------------------------------------------------------------------------------
 # Configure the logger. You can replace this basic configuration with your own
 # (e.g., using a custom configure_logger function if available).
-logger = configure_logger("main", "logging/main.log")
+logger = configure_logger("main", "main.log")
 
 # ------------------------------------------------------------------------------
 # Scripts to Execute

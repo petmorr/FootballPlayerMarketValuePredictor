@@ -21,7 +21,7 @@ from logging_config import configure_logger
 # ------------------------------------------------------------------------------
 # Logger and API Configuration
 # ------------------------------------------------------------------------------
-logging = configure_logger("player_value", "logging/player_value.log")
+logging = configure_logger("player_value", "player_value.log")
 
 API_BASE_URL: str = "http://localhost:8000"
 DATE_FORMAT: str = "%Y-%m-%d"
@@ -194,41 +194,66 @@ def handle_accept_and_continue(driver: webdriver.Chrome) -> None:
 def get_graph_container(driver: webdriver.Chrome) -> Optional[Any]:
     """
     Waits for the market value graph container element to be present and loaded.
-
-    The element is identified by its CSS selector. If not immediately found,
-    the function scrolls to the bottom and retries.
-
-    Args:
-        driver (webdriver.Chrome): The Selenium WebDriver instance.
+    This version handles the case where the element is a custom web component using a shadow DOM.
 
     Returns:
-        Optional[Any]: The graph container WebElement if found; otherwise, None.
+        Optional[Any]: The inner graph container (e.g. an <svg> element) if found; otherwise, None.
     """
     try:
-        graph = WebDriverWait(driver, 60).until(
-            EC.presence_of_element_located(
+        # Wait for the host element to be visible.
+        host = WebDriverWait(driver, 60).until(
+            EC.visibility_of_element_located(
                 (By.CSS_SELECTOR, "tm-market-value-development-graph-integrated")
             )
         )
-        driver.execute_script("arguments[0].scrollIntoView(true);", graph)
-        WebDriverWait(driver, 60).until(lambda d: len(graph.get_attribute("innerHTML").strip()) > 0)
-        logging.info("Graph container is present and loaded.")
-        return graph
+        logging.info("Graph container host element found.")
+
+        # Try to access its shadow root.
+        shadow_root = driver.execute_script("return arguments[0].shadowRoot", host)
+        if shadow_root:
+            # Assume the graph is rendered inside an <svg> element in the shadow root.
+            graph = shadow_root.find_element(By.CSS_SELECTOR, "svg")
+            driver.execute_script("arguments[0].scrollIntoView(true);", graph)
+            WebDriverWait(driver, 60).until(
+                lambda d: len(graph.get_attribute("innerHTML").strip()) > 0
+            )
+            logging.info("Graph container loaded from shadow DOM.")
+            return graph
+        else:
+            # Fallback: if no shadow DOM is present, use the host element.
+            driver.execute_script("arguments[0].scrollIntoView(true);", host)
+            WebDriverWait(driver, 60).until(
+                lambda d: len(host.get_attribute("innerHTML").strip()) > 0
+            )
+            logging.info("Graph container loaded from host element (no shadow DOM).")
+            return host
     except Exception as e:
         logging.error(f"Error getting graph container: {e}")
         logging.info("Scrolling to bottom and waiting 10 seconds...")
         driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
         time.sleep(10)
         try:
-            graph = WebDriverWait(driver, 30).until(
-                EC.presence_of_element_located(
+            host = WebDriverWait(driver, 30).until(
+                EC.visibility_of_element_located(
                     (By.CSS_SELECTOR, "tm-market-value-development-graph-integrated")
                 )
             )
-            driver.execute_script("arguments[0].scrollIntoView(true);", graph)
-            WebDriverWait(driver, 30).until(lambda d: len(graph.get_attribute("innerHTML").strip()) > 0)
-            logging.info("Graph container found after scrolling.")
-            return graph
+            shadow_root = driver.execute_script("return arguments[0].shadowRoot", host)
+            if shadow_root:
+                graph = shadow_root.find_element(By.CSS_SELECTOR, "svg")
+                driver.execute_script("arguments[0].scrollIntoView(true);", graph)
+                WebDriverWait(driver, 30).until(
+                    lambda d: len(graph.get_attribute("innerHTML").strip()) > 0
+                )
+                logging.info("Graph container loaded from shadow DOM after scrolling.")
+                return graph
+            else:
+                driver.execute_script("arguments[0].scrollIntoView(true);", host)
+                WebDriverWait(driver, 30).until(
+                    lambda d: len(host.get_attribute("innerHTML").strip()) > 0
+                )
+                logging.info("Graph container loaded from host element after scrolling (no shadow DOM).")
+                return host
         except Exception as e2:
             logging.error(f"Error getting graph container after scrolling: {e2}")
             return None
@@ -289,12 +314,7 @@ def parse_tooltip(tooltip_text: str) -> Optional[Dict[str, Any]]:
 def extract_market_value_from_graph(driver: webdriver.Chrome) -> List[str]:
     """
     Extracts market value tooltips by hovering over voronoi-cell elements in the graph.
-
-    Uses JavaScript-triggered hover events to ensure the tooltip appears and then
-    collects the tooltip text. Duplicate entries based on the raw date are skipped.
-
-    Args:
-        driver (webdriver.Chrome): The Selenium WebDriver instance.
+    This version queries for the voronoi cells inside the (possibly shadow-rooted) graph container.
 
     Returns:
         List[str]: A list of tooltip texts representing market value data.
@@ -307,11 +327,8 @@ def extract_market_value_from_graph(driver: webdriver.Chrome) -> List[str]:
             logging.error("Graph container not found.")
             return market_data
 
-        voronoi_cells = WebDriverWait(driver, 30).until(
-            EC.presence_of_all_elements_located(
-                (By.CSS_SELECTOR, "path.voronoi-cell.svelte-1plgtdf")
-            )
-        )
+        # Now, find the voronoi cells within the graph container.
+        voronoi_cells = graph.find_elements(By.CSS_SELECTOR, "path.voronoi-cell.svelte-1plgtdf")
         num_cells = len(voronoi_cells)
         logging.info(f"Found {num_cells} voronoi cell elements in the graph.")
 
@@ -320,12 +337,12 @@ def extract_market_value_from_graph(driver: webdriver.Chrome) -> List[str]:
         for index, cell in enumerate(voronoi_cells):
             tooltip_text: Optional[str] = None
 
-            # Try up to 4 attempts to trigger and capture the tooltip
+            # Try up to 4 attempts to trigger and capture the tooltip.
             for attempt in range(4):
                 try:
                     driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", cell)
                     time.sleep(0.5)
-                    # Trigger hover using JavaScript
+                    # Trigger hover using JavaScript.
                     driver.execute_script(
                         "var evt = document.createEvent('MouseEvents');"
                         "evt.initMouseEvent('mouseover', true, true, window, 0, 0, 0, 0, 0, false, false, false, false, 0, null);"

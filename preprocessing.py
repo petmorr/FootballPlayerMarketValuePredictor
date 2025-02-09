@@ -11,7 +11,7 @@ from logging_config import configure_logger
 # ------------------------------------------------------------------------------
 # Logger & Paths Setup
 # ------------------------------------------------------------------------------
-logger = configure_logger("preprocessing", "logging/preprocessing.log")
+logger = configure_logger("preprocessing", "preprocessing.log")
 
 RAW_DATA_FOLDER: str = './data/scraped'
 CLEANED_DATA_FOLDER: str = './data/cleaned'
@@ -33,7 +33,6 @@ EXPECTED_COLUMNS_ORDER = [
     'non-penalty_xg_per_90', 'non-penalty_xg_+_xag_per_90',
     'matches'
 ]
-# Two additional metadata columns will be appended: 'league' and 'season'.
 
 # Define the set of essential columns (used in integrity checks)
 ESSENTIAL_COLUMNS = {
