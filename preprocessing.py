@@ -1,5 +1,4 @@
 import os
-import re
 from multiprocessing import Pool
 from pathlib import Path
 
@@ -41,7 +40,7 @@ ESSENTIAL_COLUMNS = {
 }
 
 # ------------------------------------------------------------------------------
-# Country Code Mapping (updated to include SUI)
+# Country Code Mapping
 # ------------------------------------------------------------------------------
 COUNTRY_CODE_MAPPING = {
     'NGA': 'Nigeria', 'BRA': 'Brazil', 'ENG': 'England', 'FRA': 'France',
@@ -112,14 +111,6 @@ def rename_columns(df: pd.DataFrame) -> pd.DataFrame:
         raise ValueError("Not enough columns to rename")
     df = df.iloc[:, :total_expected]
     df.columns = EXPECTED_COLUMNS_ORDER + ['league', 'season']
-    return df
-
-def standardize_player_names(df: pd.DataFrame) -> pd.DataFrame:
-    """Remove unwanted characters and convert player names to lower-case."""
-    if 'player' in df.columns:
-        df['player'] = df['player'].apply(
-            lambda x: re.sub(r'[^a-zA-Z0-9 ]', '', x).lower() if isinstance(x, str) else x
-        )
     return df
 
 def ensure_data_types(df: pd.DataFrame) -> pd.DataFrame:
@@ -356,7 +347,6 @@ def preprocess_file(file_path: str, league: str, season: str) -> None:
         # Process DataFrame: convert types, handle missing data, and create features.
         df = ensure_data_types(df)
         df = handle_missing_data(df)
-        df = standardize_player_names(df)
         df = feature_engineering(df)
         df = additional_enhancements(df)
         df = advanced_feature_engineering(df)
