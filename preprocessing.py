@@ -344,11 +344,7 @@ def preprocess_file(file_path: Path, league: str, season: str) -> None:
         # Run integrity checks.
         df = data_integrity_checks(df, str(file_path))
 
-        # Save outputs as CSV (gzip) and Parquet.
-        cleaned_csv_path = CLEANED_DATA_FOLDER / f"cleaned_{league}_{season}.csv.gz"
-        df.to_csv(cleaned_csv_path, index=False, float_format="%.4f", compression='gzip')
-        logger.info(f"Cleaned CSV saved to: {cleaned_csv_path}")
-
+        # Save outputs as Parquet.
         cleaned_parquet_path = CLEANED_DATA_FOLDER / f"cleaned_{league}_{season}.parquet"
         df.to_parquet(cleaned_parquet_path, index=False)
         logger.info(f"Cleaned Parquet saved to: {cleaned_parquet_path}")

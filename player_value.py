@@ -34,7 +34,7 @@ MAX_API_RETRIES: int = 3
 def get_clean_basename(file_path: str) -> str:
     """
     Returns a clean base name without all extensions.
-    For example, "players.csv.gz" becomes "players".
+    For example, "players.parquet" becomes "players".
     """
     p = Path(file_path)
     if len(p.suffixes) > 1:
@@ -45,31 +45,23 @@ def get_clean_basename(file_path: str) -> str:
 
 def read_input_file(file_path: str) -> pd.DataFrame:
     """
-    Reads an input file that may be a CSV, gzipped CSV, or a Parquet file.
+    Reads an input file that should be a Parquet file.
     """
     p = Path(file_path)
     if p.suffix == ".parquet":
         return pd.read_parquet(p)
-    elif file_path.endswith('.csv.gz'):
-        return pd.read_csv(p, compression='gzip', encoding='utf-8')
-    else:
-        return pd.read_csv(p, encoding='utf-8')
 
 def write_output_file(df: pd.DataFrame, file_path: str) -> None:
     """
-    Writes the DataFrame to the ./data/updated folder in two formats:
-      1. CSV (gzip compressed)
-      2. Parquet
-    The output files will be named as <basename>.csv.gz and <basename>.parquet.
+    Writes the DataFrame to the ./data/updated folder in parquet format.
+    The output files will be named as <basename>.parquet.
     """
     output_dir = Path("./data/updated")
     output_dir.mkdir(parents=True, exist_ok=True)
     base_name = get_clean_basename(file_path)
-    csv_path = output_dir / f"{base_name}.csv.gz"
     parquet_path = output_dir / f"{base_name}.parquet"
-    df.to_csv(csv_path, index=False, compression="gzip")
     df.to_parquet(parquet_path, index=False)
-    logging.info(f"Updated dataset saved to CSV: {csv_path} and Parquet: {parquet_path}")
+    logging.info(f"Updated dataset saved to Parquet: {parquet_path}")
 
 # ------------------------------------------------------------------------------
 # Text Encoding Fix
