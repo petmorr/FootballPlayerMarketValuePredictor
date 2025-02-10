@@ -12,9 +12,9 @@ from logging_config import configure_logger
 # ------------------------------------------------------------------------------
 logger = configure_logger("preprocessing", "preprocessing.log")
 
-RAW_DATA_FOLDER: str = './data/scraped'
-CLEANED_DATA_FOLDER: str = './data/cleaned'
-os.makedirs(CLEANED_DATA_FOLDER, exist_ok=True)
+RAW_DATA_FOLDER = Path("./data/scraped")
+CLEANED_DATA_FOLDER = Path("./data/cleaned")
+CLEANED_DATA_FOLDER.mkdir(parents=True, exist_ok=True)
 
 # ------------------------------------------------------------------------------
 # Expected Standardized Column Names (in order)
@@ -33,7 +33,7 @@ EXPECTED_COLUMNS_ORDER = [
     'matches'
 ]
 
-# Define the set of essential columns (used in integrity checks)
+# Essential columns for integrity checks
 ESSENTIAL_COLUMNS = {
     'rank', 'player', 'country_code', 'position', 'squad', 'age',
     'born', 'matches_played', 'minutes_played', 'goals'
@@ -50,7 +50,7 @@ COUNTRY_CODE_MAPPING = {
     'SWE': 'Sweden', 'NOR': 'Norway', 'FIN': 'Finland', 'ISL': 'Iceland',
     'CRO': 'Croatia', 'SRB': 'Serbia', 'SVK': 'Slovakia', 'SVN': 'Slovenia',
     'CZE': 'Czech Republic', 'POL': 'Poland', 'HUN': 'Hungary', 'AUT': 'Austria',
-    'SWI': 'Switzerland', 'SUI': 'Switzerland',  # both variants now
+    'SWI': 'Switzerland', 'SUI': 'Switzerland',  # both variants
     'GRE': 'Greece', 'TUR': 'Turkey', 'ROU': 'Romania',
     'RUS': 'Russia', 'UKR': 'Ukraine', 'BLR': 'Belarus', 'KAZ': 'Kazakhstan',
     'CHN': 'China', 'JPN': 'Japan', 'KOR': 'South Korea', 'AUS': 'Australia',
@@ -89,7 +89,7 @@ def flatten_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Flatten a multi-index header by joining levels with an underscore."""
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = [
-            '_'.join([str(item).strip() for item in col if item and str(item).lower() != 'nan'])
+            '_'.join(str(item).strip() for item in col if item and str(item).lower() != 'nan')
             for col in df.columns.values
         ]
     return df
@@ -99,12 +99,10 @@ def normalize_column_names(df: pd.DataFrame) -> pd.DataFrame:
     df.columns = df.columns.str.lower().str.replace(' ', '_', regex=True)
     return df
 
-
 def rename_columns(df: pd.DataFrame) -> pd.DataFrame:
     """
     Rename the DataFrame columns to the standardized expected names.
-    Expects that the DataFrame contains at least len(EXPECTED_COLUMNS_ORDER) columns,
-    and that the last two columns are 'league' and 'season'.
+    Expects the DataFrame to have exactly len(EXPECTED_COLUMNS_ORDER)+2 columns.
     """
     total_expected = len(EXPECTED_COLUMNS_ORDER) + 2  # plus league and season
     if df.shape[1] < total_expected:
@@ -116,16 +114,15 @@ def rename_columns(df: pd.DataFrame) -> pd.DataFrame:
 def ensure_data_types(df: pd.DataFrame) -> pd.DataFrame:
     """
     Convert columns expected to be numeric into proper numeric types.
-    Also converts object columns with few unique values to categorical.
+    Also convert object columns with few unique values to categorical.
     """
     non_numeric = {'player', 'country_code', 'position', 'squad', 'born', 'league', 'season'}
     numeric_cols = set(EXPECTED_COLUMNS_ORDER) - non_numeric
 
-    for col in df.columns:
-        if col in numeric_cols:
-            df[col] = pd.to_numeric(df[col], errors='coerce')
+    for col in df.columns.intersection(numeric_cols):
+        df[col] = pd.to_numeric(df[col], errors='coerce')
     for col in df.select_dtypes(include=['object']).columns:
-        if df[col].nunique() < len(df) * 0.5:
+        if df[col].nunique() < 0.5 * len(df):
             df[col] = df[col].astype('category')
     return df
 
@@ -134,7 +131,7 @@ def handle_missing_data(df: pd.DataFrame) -> pd.DataFrame:
     Drop columns with too many missing values and fill missing values.
     Numeric columns are filled with median and categorical with mode.
     """
-    threshold = 0.3 * len(df)
+    threshold = int(0.3 * len(df))
     df.dropna(thresh=threshold, axis=1, inplace=True)
     for col in df.select_dtypes(include=[np.number]).columns:
         df[col] = df[col].fillna(df[col].median())
@@ -152,9 +149,7 @@ def feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 def additional_enhancements(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Remove rows with unrealistic values and compute performance consistency.
-    """
+    """Remove rows with unrealistic values and compute performance consistency."""
     if 'age' in df.columns:
         df = df[(df['age'] >= 16) & (df['age'] <= 45)]
     if 'minutes_played' in df.columns:
@@ -167,8 +162,8 @@ def additional_enhancements(df: pd.DataFrame) -> pd.DataFrame:
 
 def advanced_feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Create advanced features such as playing time metrics, offensive metrics,
-    per-90 comparisons, non-penalty metrics, progressive metrics, and age features.
+    Create advanced features such as playing time, offensive metrics,
+    per-90 comparisons, non-penalty and progressive metrics, and age features.
     """
     # Playing Time Metrics
     if 'minutes_played' in df.columns and 'matches_played' in df.columns:
@@ -191,15 +186,14 @@ def advanced_feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
     if 'assists' in df.columns and 'expected_assists' in df.columns:
         df['assisting_efficiency'] = df['assists'] / df['expected_assists'].replace(0, np.nan)
     if {'goals', 'assists', 'expected_goals', 'expected_assists'}.issubset(df.columns):
-        df['overall_efficiency'] = (df['goals'] + df['assists']) / (
-                df['expected_goals'] + df['expected_assists']).replace(0, np.nan)
+        total_exp = (df['expected_goals'] + df['expected_assists']).replace(0, np.nan)
+        df['overall_efficiency'] = (df['goals'] + df['assists']) / total_exp
     if 'goals' in df.columns and 'expected_goals' in df.columns:
         df['goal_overperformance'] = df['goals'] - df['expected_goals']
     if 'assists' in df.columns and 'expected_assists' in df.columns:
         df['assist_overperformance'] = df['assists'] - df['expected_assists']
     if {'goals', 'assists', 'expected_goals', 'expected_assists'}.issubset(df.columns):
-        df['overall_overperformance'] = (df['goals'] + df['assists']) - (
-                df['expected_goals'] + df['expected_assists'])
+        df['overall_overperformance'] = (df['goals'] + df['assists']) - (df['expected_goals'] + df['expected_assists'])
     if 'goals' in df.columns and 'assists' in df.columns:
         df['goal_ratio'] = df['goals'] / (df['goals'] + df['assists']).replace(0, np.nan)
 
@@ -221,9 +215,7 @@ def advanced_feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
 
     # Progressive Metrics
     if {'progressive_carries', 'progressive_passes', 'progressive_receives', 'matches_played'}.issubset(df.columns):
-        df['progressive_total'] = (df['progressive_carries'] +
-                                   df['progressive_passes'] +
-                                   df['progressive_receives'])
+        df['progressive_total'] = df['progressive_carries'] + df['progressive_passes'] + df['progressive_receives']
         df['progressive_actions_per_match'] = df['progressive_total'] / df['matches_played'].replace(0, np.nan)
         df['progressive_carries_ratio'] = df['progressive_carries'] / df['progressive_total'].replace(0, np.nan)
         df['progressive_passes_ratio'] = df['progressive_passes'] / df['progressive_total'].replace(0, np.nan)
@@ -233,40 +225,32 @@ def advanced_feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
     if 'age' in df.columns:
         df['age_squared'] = df['age'] ** 2
     if 'born' in df.columns:
-        try:
-            df['birth_year'] = pd.to_datetime(df['born'], errors='coerce').dt.year
-        except Exception as e:
-            logger.warning("Could not parse 'born' column to extract birth_year: " + str(e))
+        df['birth_year'] = pd.to_datetime(df['born'], errors='coerce').dt.year
 
     return df
 
-
 def finalize_data(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    After all processing and feature engineering, fill any remaining numeric NaN values
-    with 0.
-    """
+    """Fill any remaining numeric NaN values with 0."""
     numeric_cols = df.select_dtypes(include=[np.number]).columns
     df[numeric_cols] = df[numeric_cols].fillna(0)
     return df
 
-
 def clean_country_codes(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Clean the country code column by extracting the three-letter code.
-    For example, a value like 'ng NGA' will become 'NGA'. Also, if the value is
-    a header-like value ('Nation'), it returns NaN.
-    This version splits the string by whitespace and takes the last token.
+    Clean the country_code column.
+    Uses vectorized string operations to split on whitespace and take the last token.
+    Also, values like 'Nation' are set to NaN.
     """
     if 'country_code' in df.columns:
-        def extract_code(x):
-            s = str(x).strip()
-            if s.lower() == 'nation':
-                return np.nan
-            parts = s.split()
-            return parts[-1].upper() if parts else s.upper()
-
-        df['country_code'] = df['country_code'].apply(extract_code)
+        df['country_code'] = (
+            df['country_code']
+            .astype(str)
+            .str.strip()
+            .str.split()
+            .str[-1]
+            .str.upper()
+            .mask(lambda s: s.str.lower() == 'nation')
+        )
     return df
 
 def data_integrity_checks(df: pd.DataFrame, file_path: str) -> pd.DataFrame:
@@ -289,15 +273,11 @@ def data_integrity_checks(df: pd.DataFrame, file_path: str) -> pd.DataFrame:
                            f"{duplicates[['player', 'squad', 'season']].drop_duplicates().to_dict(orient='records')}")
     return df
 
-
 def standardize_country_column(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    If the raw file has a 'nation' column (with three-letter codes), rename it to 'country_code'.
-    """
+    """If the raw file has a 'nation' column (with three-letter codes), rename it to 'country_code'."""
     if 'nation' in df.columns and 'country_code' not in df.columns:
         df.rename(columns={'nation': 'country_code'}, inplace=True)
     return df
-
 
 def remove_header_rows(df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -306,28 +286,30 @@ def remove_header_rows(df: pd.DataFrame) -> pd.DataFrame:
     is exactly 'player'.
     """
     if 'player' in df.columns:
-        df = df[df['player'].astype(str).str.strip().str.lower() != 'player']
+        df = df[~df['player'].astype(str).str.strip().str.lower().eq('player')]
     return df
 
-def preprocess_file(file_path: str, league: str, season: str) -> None:
+
+# ------------------------------------------------------------------------------
+# Main Preprocessing Function
+# ------------------------------------------------------------------------------
+def preprocess_file(file_path: Path, league: str, season: str) -> None:
     try:
         logger.info(f"Processing file: {file_path}")
+        # Try reading with multi-index header first.
         try:
-            # Attempt multi-index header read:
             df = pd.read_csv(file_path, header=[0, 1])
             df = flatten_columns(df)
             df = normalize_column_names(df)
             df = standardize_country_column(df)
             df = remove_header_rows(df)
-            # In the multi-index branch, rename the columns first...
             if df.shape[1] == len(EXPECTED_COLUMNS_ORDER) + 2:
                 df = rename_columns(df)
-                # Clean the 'country_code' column after renaming
                 df = clean_country_codes(df)
             else:
-                raise ValueError("Multi-index read did not produce the expected number of columns.")
+                raise ValueError("Multi-index header did not produce the expected number of columns.")
         except Exception as e:
-            logger.warning(f"Multi-level header read failed ({e}). Trying single header.")
+            logger.warning(f"Multi-index header read failed ({e}). Trying single header.")
             df = pd.read_csv(file_path, header=0)
             df = normalize_column_names(df)
             df = standardize_country_column(df)
@@ -335,16 +317,15 @@ def preprocess_file(file_path: str, league: str, season: str) -> None:
             if df.shape[1] >= len(EXPECTED_COLUMNS_ORDER) + 2:
                 df = df.iloc[:, :len(EXPECTED_COLUMNS_ORDER) + 2]
                 df.columns = EXPECTED_COLUMNS_ORDER + ['league', 'season']
-                # Clean the country codes after renaming
                 df = clean_country_codes(df)
             else:
                 raise ValueError("Single header read did not produce enough columns.")
 
-        # Ensure no header rows remain and drop duplicates.
+        # Remove duplicate header rows and duplicate records.
         df = remove_header_rows(df)
         df = df.drop_duplicates(subset=['player', 'squad', 'season'])
 
-        # Process DataFrame: convert types, handle missing data, and create features.
+        # Process DataFrame: ensure correct data types, handle missing data, and add features.
         df = ensure_data_types(df)
         df = handle_missing_data(df)
         df = feature_engineering(df)
@@ -352,25 +333,23 @@ def preprocess_file(file_path: str, league: str, season: str) -> None:
         df = advanced_feature_engineering(df)
         df = finalize_data(df)
 
-        # Map full nation name if not already provided.
+        # Map full nation name if needed.
         if 'country_code' in df.columns and 'country' not in df.columns:
-            # Convert to string so that fillna does not try to set a new category.
-            mapped = df['country_code'].astype(str).map(COUNTRY_CODE_MAPPING)
-            df['country'] = mapped.astype(object).fillna('Not Available')
+            df['country'] = df['country_code'].astype(str).map(COUNTRY_CODE_MAPPING).fillna('Not Available')
 
         # Overwrite metadata columns with provided values.
         df['league'] = league
         df['season'] = season
 
         # Run integrity checks.
-        df = data_integrity_checks(df, file_path)
+        df = data_integrity_checks(df, str(file_path))
 
-        # Save to CSV (gzip) and Parquet.
-        cleaned_csv_path = os.path.join(CLEANED_DATA_FOLDER, f"cleaned_{league}_{season}.csv.gz")
+        # Save outputs as CSV (gzip) and Parquet.
+        cleaned_csv_path = CLEANED_DATA_FOLDER / f"cleaned_{league}_{season}.csv.gz"
         df.to_csv(cleaned_csv_path, index=False, float_format="%.4f", compression='gzip')
         logger.info(f"Cleaned CSV saved to: {cleaned_csv_path}")
 
-        cleaned_parquet_path = os.path.join(CLEANED_DATA_FOLDER, f"cleaned_{league}_{season}.parquet")
+        cleaned_parquet_path = CLEANED_DATA_FOLDER / f"cleaned_{league}_{season}.parquet"
         df.to_parquet(cleaned_parquet_path, index=False)
         logger.info(f"Cleaned Parquet saved to: {cleaned_parquet_path}")
 
@@ -378,23 +357,23 @@ def preprocess_file(file_path: str, league: str, season: str) -> None:
         logger.error(f"Error processing file {file_path}: {e}")
 
 def process_single_file(file_name: str) -> None:
-    """Process a single CSV file, expecting a filename format like <league>_<season>_..."""
+    """
+    Process a single CSV file. Expects a filename format like <league>_<season>_...
+    """
     if file_name.endswith('.csv'):
         try:
             parts = Path(file_name).stem.split('_')
-            if len(parts) >= 2:
-                league, season = parts[0], parts[1]
-            else:
-                league, season = "unknown", "unknown"
-            file_path = os.path.join(RAW_DATA_FOLDER, file_name)
+            league, season = (parts[0], parts[1]) if len(parts) >= 2 else ("unknown", "unknown")
+            file_path = RAW_DATA_FOLDER / file_name
             preprocess_file(file_path, league, season)
         except Exception as e:
             logger.error(f"Error processing file {file_name}: {e}")
 
-def process_all_files(input_folder: str) -> None:
+
+def process_all_files(input_folder: Path) -> None:
     """Process all CSV files in the given folder using multiprocessing."""
-    files = [f for f in os.listdir(input_folder) if f.endswith('.csv')]
-    with Pool(processes=4) as pool:
+    files = [f.name for f in input_folder.glob("*.csv")]
+    with Pool(processes=os.cpu_count()) as pool:
         pool.map(process_single_file, files)
 
 # ------------------------------------------------------------------------------
