@@ -4,6 +4,7 @@ from io import StringIO
 
 import pandas as pd
 from bs4 import BeautifulSoup, Comment
+from pandas import DataFrame
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
@@ -73,7 +74,7 @@ def build_league_season_url(league_name: str, base_url: str, season: str) -> str
     return url
 
 
-def get_player_data_selenium(url: str, driver: webdriver.Chrome) -> pd.DataFrame:
+def get_player_data_selenium(url: str, driver: webdriver.Chrome) -> DataFrame | None:
     """
     Scrape player statistics data from a given URL using Selenium.
 

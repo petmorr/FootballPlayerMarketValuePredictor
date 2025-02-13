@@ -291,6 +291,54 @@ def remove_header_rows(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # ------------------------------------------------------------------------------
+# NEW: Remove Redundant Columns Function
+# ------------------------------------------------------------------------------
+def remove_redundant_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Remove columns that are considered redundant because their information
+    is captured in feature-engineered columns.
+    Identifiers (like rank, player, country_code, position, squad, league, season)
+    and key inputs (e.g., age) are retained.
+    """
+    redundant_cols = {
+        'born',
+        'matches_played',
+        'starts',
+        'minutes_played',
+        '90s_played',
+        'goals',
+        'assists',
+        'goals_+_assists',
+        'goals_-_penalties',
+        'penalty_kicks_made',
+        'penalty_kicks_attempted',
+        'yellow_cards',
+        'red_cards',
+        'expected_goals',
+        'non-penalty_xg',
+        'expected_assists',
+        'non-penalty_xg_+_xag',
+        'goals_per_90',
+        'assists_per_90',
+        'goals_+_assists_per_90',
+        'goals_-_penalties_per_90',
+        'goals_+_assists_-_penalties_per_90',
+        'xg_per_90',
+        'xag_per_90',
+        'xg_+_xag_per_90',
+        'non-penalty_xg_per_90',
+        'non-penalty_xg_+_xag_per_90',
+        'progressive_carries',
+        'progressive_passes',
+        'progressive_receives'
+    }
+    # Only drop columns that exist in the dataframe.
+    redundant_to_drop = [col for col in redundant_cols if col in df.columns]
+    df = df.drop(columns=redundant_to_drop)
+    logger.info(f"Removed redundant columns: {redundant_to_drop}")
+    return df
+
+# ------------------------------------------------------------------------------
 # Main Preprocessing Function
 # ------------------------------------------------------------------------------
 def preprocess_file(file_path: Path, league: str, season: str) -> None:
@@ -344,6 +392,9 @@ def preprocess_file(file_path: Path, league: str, season: str) -> None:
         # Run integrity checks.
         df = data_integrity_checks(df, str(file_path))
 
+        # Remove redundant columns that are now covered by feature engineering.
+        df = remove_redundant_columns(df)
+
         # Save outputs as Parquet.
         cleaned_parquet_path = CLEANED_DATA_FOLDER / f"cleaned_{league}_{season}.parquet"
         df.to_parquet(cleaned_parquet_path, index=False)
@@ -364,7 +415,6 @@ def process_single_file(file_name: str) -> None:
             preprocess_file(file_path, league, season)
         except Exception as e:
             logger.error(f"Error processing file {file_name}: {e}")
-
 
 def process_all_files(input_folder: Path) -> None:
     """Process all CSV files in the given folder using multiprocessing."""

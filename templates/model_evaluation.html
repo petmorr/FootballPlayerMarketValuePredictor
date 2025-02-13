@@ -1,17 +1,15 @@
 {% extends "base.html" %}
+{% block title %}Model Evaluation{% endblock %}
+
 {% block content %}
 <div class="mt-3">
     <h2>Model Evaluation</h2>
-    <p>This section will display evaluation metrics and graphs (e.g., MSE, R², residual plots) for your predictive
-        model.</p>
+    <p>
+        This section will display evaluation metrics and graphs for the trained models.
+        (Functionality is under development.)
+    </p>
     <form method="POST">
         <button class="btn btn-primary" type="submit">Evaluate Model</button>
     </form>
-    <hr>
-    <!-- Placeholder for future charts and metrics -->
-    <div class="mt-3">
-        <h4>Evaluation Metrics</h4>
-        <p>(Metrics will be displayed here once implemented.)</p>
-    </div>
 </div>
 {% endblock %}

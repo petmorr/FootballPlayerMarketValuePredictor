@@ -1,11 +1,20 @@
 {% extends "base.html" %}
+{% block title %}Home - Peter Morris Honours Project{% endblock %}
+
 {% block content %}
-<div class="jumbotron mt-3">
-    <h1 class="display-4">Player Market Value Prediction</h1>
-    <p class="lead">Welcome to my Honours Project. This project aims to develop a machine learning model that predicts a
-        player's market value based on performance data.</p>
+<div class="jumbotron">
+    <h1 class="display-4">Welcome to my Honours Project!</h1>
+    <p class="lead">
+        This project aims to create a machine learning model to determine a player's market value based on performance
+        data.
+    </p>
     <hr class="my-4">
-    <p>Use the navigation bar above to explore each step of the workflow—from web scraping and preprocessing, through
-        player value retrieval, model creation, and finally model evaluation.</p>
+    <p>Use the navigation bar above to access the various functionalities:</p>
+    <ul>
+        <li><a href="{{ url_for('model_preprocessing') }}">Model Preprocessing</a></li>
+        <li><a href="{{ url_for('model_creation') }}">Model Creation</a></li>
+        <li><a href="{{ url_for('model_evaluation') }}">Model Evaluation</a></li>
+        <li><a href="{{ url_for('manual_input') }}">Manual Transfer Value Input</a></li>
+    </ul>
 </div>
 {% endblock %}
