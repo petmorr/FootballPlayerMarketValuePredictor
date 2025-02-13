@@ -28,7 +28,7 @@ LEAGUES = {
     "Ligue-1": "https://fbref.com/en/comps/13/",
 }
 SEASONS = ["2023-2024", "2022-2023", "2021-2022", "2020-2021", "2019-2020"]
-OUTPUT_DIR = "data/scraped"
+OUTPUT_DIR = "../data/scraped"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 

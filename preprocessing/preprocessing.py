@@ -12,8 +12,8 @@ from logging_config import configure_logger
 # ------------------------------------------------------------------------------
 logger = configure_logger("preprocessing", "preprocessing.log")
 
-RAW_DATA_FOLDER = Path("./data/scraped")
-CLEANED_DATA_FOLDER = Path("./data/cleaned")
+RAW_DATA_FOLDER = Path("../data/scraped")
+CLEANED_DATA_FOLDER = Path("../data/cleaned")
 CLEANED_DATA_FOLDER.mkdir(parents=True, exist_ok=True)
 
 # ------------------------------------------------------------------------------

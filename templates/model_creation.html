@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="mt-3">
+    <h2>Model Creation &amp; Hyperparameter Tuning</h2>
+    <p>Select a machine learning model and adjust its parameters to predict player market values based on performance
+        data.</p>
+    <form method="POST">
+        <div class="form-group">
+            <label for="model_choice">Choose a Model:</label>
+            <select class="form-control" id="model_choice" name="model_choice">
+                <option>Linear Regression</option>
+            </select>
+        </div>
+        <!-- You can add more parameter input fields here -->
+        <button class="btn btn-primary" type="submit">Create/Select Model</button>
+    </form>
+</div>
+{% endblock %}

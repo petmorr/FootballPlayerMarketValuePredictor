@@ -11,6 +11,7 @@ import ftfy
 import pandas as pd
 import requests
 import unicodedata
+from pandas import DataFrame
 from rapidfuzz.fuzz import partial_ratio
 
 from logging_config import configure_logger
@@ -43,7 +44,8 @@ def get_clean_basename(file_path: str) -> str:
     else:
         return p.stem
 
-def read_input_file(file_path: str) -> pd.DataFrame:
+
+def read_input_file(file_path: str) -> DataFrame | None:
     """
     Reads an input file that should be a Parquet file.
     """
@@ -56,7 +58,7 @@ def write_output_file(df: pd.DataFrame, file_path: str) -> None:
     Writes the DataFrame to the ./data/updated folder in parquet format.
     The output files will be named as <basename>.parquet.
     """
-    output_dir = Path("./data/updated")
+    output_dir = Path("../data/updated")
     output_dir.mkdir(parents=True, exist_ok=True)
     base_name = get_clean_basename(file_path)
     parquet_path = output_dir / f"{base_name}.parquet"
@@ -350,7 +352,7 @@ def main() -> None:
     If the API does not return a valid market value for a player,
     the script logs a warning so that manual input can later be provided via the GUI.
     """
-    input_folder = Path("./data/cleaned")
+    input_folder = Path("../data/cleaned")
     if not input_folder.is_dir():
         logging.error(f"Input folder '{input_folder}' does not exist.")
         return

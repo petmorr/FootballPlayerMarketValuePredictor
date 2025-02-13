@@ -1,89 +1,156 @@
-import subprocess
-from pathlib import Path
-from sys import executable
+from flask import Flask, render_template, request, redirect, url_for, flash
 
 from logging_config import configure_logger
 
-# ------------------------------------------------------------------------------
-# Logger Configuration
-# ------------------------------------------------------------------------------
-logger = configure_logger("main", "main.log")
+logger = configure_logger("web_portal", "web_portal.log")
 
-# ------------------------------------------------------------------------------
-# Scripts to Execute (in order)
-# ------------------------------------------------------------------------------
-SCRIPTS = [
-    "web_scrape.py",  # Script to scrape player data.
-    "preprocessing.py",  # Script to preprocess scraped data.
-    "player_value.py"  # Script to add market values to the preprocessed data.
-]
+app = Flask(__name__)
+app.secret_key = "replace_with_your_secret_key"
 
-# ------------------------------------------------------------------------------
-# Function: execute_script
-# ------------------------------------------------------------------------------
-def execute_script(script_name: str) -> None:
-    """
-    Execute a Python script using subprocess.
 
-    This function builds the absolute path for the given script, verifies
-    its existence, and then runs it using the current Python interpreter.
-    Output and errors are captured and logged.
+# --------------------------
+# Home / Index Route
+# --------------------------
+@app.route("/")
+def index():
+    return render_template("index.html", title="Home")
 
-    Args:
-        script_name (str): Name of the Python script to execute.
 
-    Raises:
-        FileNotFoundError: If the script is not found in the current directory.
-    """
-    script_path = Path.cwd() / script_name
-    if not script_path.is_file():
-        raise FileNotFoundError(
-            f"Script '{script_name}' not found in the current directory: {Path.cwd()}"
-        )
+# --------------------------
+# Web Scraping Route (Placeholder)
+# --------------------------
+@app.route("/web_scraping", methods=["GET", "POST"])
+def web_scraping():
+    if request.method == "POST":
+        flash("Web scraping functionality is not yet implemented.")
+        logger.info("Web scraping triggered (placeholder).")
+        return redirect(url_for("web_scraping"))
+    return render_template("web_scraping.html", title="Web Scraping")
 
-    logger.info(f"Executing script: {script_name}")
-    try:
-        # Use sys.executable to ensure the current Python interpreter is used.
-        result = subprocess.run(
-            [executable, str(script_path)],
-            capture_output=True,
-            text=True,
-            check=False
-        )
 
-        if result.returncode == 0:
-            logger.info(f"Script '{script_name}' completed successfully.")
-            logger.debug(f"Output:\n{result.stdout}")
-        else:
-            logger.error(
-                f"Script '{script_name}' encountered an error (Return code: {result.returncode})."
-            )
-            logger.error(f"Error output:\n{result.stderr}")
-    except Exception as e:
-        logger.exception(f"An error occurred while executing '{script_name}': {e}")
+# --------------------------
+# Preprocessing Route (Placeholder)
+# --------------------------
+@app.route("/preprocessing", methods=["GET", "POST"])
+def preprocessing():
+    if request.method == "POST":
+        flash("Preprocessing functionality is not yet implemented.")
+        logger.info("Preprocessing triggered (placeholder).")
+        return redirect(url_for("preprocessing"))
+    return render_template("preprocessing.html", title="Preprocessing")
 
-# ------------------------------------------------------------------------------
-# Function: main
-# ------------------------------------------------------------------------------
-def main() -> None:
-    """
-    Execute all specified scripts sequentially.
 
-    Iterates over the list of scripts and executes each one using the execute_script function.
-    Any errors during execution are logged.
-    """
-    logger.info("Starting the execution of all scripts...")
-    for script in SCRIPTS:
-        try:
-            execute_script(script)
-        except FileNotFoundError as fnf_error:
-            logger.error(fnf_error)
-        except Exception as e:
-            logger.exception(f"An unexpected error occurred while processing '{script}': {e}")
-    logger.info("All scripts have been executed.")
+# --------------------------
+# Player Value / Manual Input Route
+# --------------------------
+@app.route("/player_value", methods=["GET", "POST"])
+def player_value():
+    if request.method == "POST":
+        # Here, you would process the user input for a single player.
+        player_name = request.form.get("player_name")
+        team_name = request.form.get("team_name")
+        dataset = request.form.get("dataset")
+        season = request.form.get("season")
+        closest_date = request.form.get("closest_date")
+        transfer_value = request.form.get("transfer_value")
+        flash(
+            f"Manual input received for {player_name} (Team: {team_name}, {dataset}, {season}, Closest Date: {closest_date}) with transfer value: {transfer_value}.")
+        logger.info(
+            f"Manual player value input: {player_name}, Team: {team_name}, Dataset: {dataset}, Season: {season}, Closest Date: {closest_date}, Value: {transfer_value}")
+        return redirect(url_for("player_value"))
+    return render_template("player_value.html", title="Player Market Value")
 
-# ------------------------------------------------------------------------------
-# Script Entry Point
-# ------------------------------------------------------------------------------
+
+# --------------------------
+# Model Creation / Tuning Route (Placeholder)
+# --------------------------
+@app.route("/model_creation", methods=["GET", "POST"])
+def model_creation():
+    if request.method == "POST":
+        model_choice = request.form.get("model_choice")
+        flash(f"Model creation triggered for {model_choice} (functionality not yet implemented).")
+        logger.info(f"Model creation triggered: {model_choice} (placeholder).")
+        return redirect(url_for("model_creation"))
+    return render_template("model_creation.html", title="Model Creation")
+
+
+# --------------------------
+# Model Evaluation Route (Placeholder)
+# --------------------------
+@app.route("/model_evaluation", methods=["GET", "POST"])
+def model_evaluation():
+    if request.method == "POST":
+        flash("Model evaluation functionality is not yet implemented.")
+        logger.info("Model evaluation triggered (placeholder).")
+        return redirect(url_for("model_evaluation"))
+    return render_template("model_evaluation.html", title="Model Evaluation")
+
+
+# --------------------------
+# Run Full Pipeline Route (Placeholder)
+# --------------------------
+@app.route("/run_all", methods=["GET", "POST"])
+def run_all():
+    if request.method == "POST":
+        flash("Full pipeline run functionality is not yet implemented.")
+        logger.info("Full pipeline run triggered (placeholder).")
+        return redirect(url_for("index"))
+    return render_template("run_all.html", title="Run Full Pipeline")
+
+
+# --------------------------
+# Manual Input Route for Missing Transfer Values
+# --------------------------
+@app.route("/manual_input", methods=["GET", "POST"])
+def manual_input():
+    if request.method == "POST":
+        # Process the manual inputs.
+        # For simplicity, assume that the form submits lists of values.
+        players = request.form.getlist("player")
+        teams = request.form.getlist("team")
+        datasets = request.form.getlist("dataset")
+        seasons = request.form.getlist("season")
+        closest_dates = request.form.getlist("closest_date")
+        manual_values = request.form.getlist("manual_value")
+
+        # In a complete implementation, you would update the dataset accordingly.
+        flash("Manual input received for transfer values (functionality not yet fully implemented).")
+        logger.info(f"Manual input received for players: {players} with values: {manual_values}")
+        return redirect(url_for("manual_input"))
+
+    # Sample data for demonstration purposes.
+    # In your full system, this would be dynamically generated from the updated dataset.
+    sample_missing = [
+        {
+            "player": "Miloš Veljković",
+            "team": "SV Werder Bremen",
+            "dataset": "Bundesliga_2019-2020",
+            "season": "2019-2020",
+            "closest_date": "2020-05-20",
+            "current_value": "N/A"
+        },
+        {
+            "player": "Obite N'Dicka",
+            "team": "Eint Frankfurt",
+            "dataset": "Bundesliga_2021-2022",
+            "season": "2021-2022",
+            "closest_date": "2022-06-15",
+            "current_value": "N/A"
+        },
+        {
+            "player": "Evan N'Dicka",
+            "team": "Eint Frankfurt",
+            "dataset": "Bundesliga_2021-2022",
+            "season": "2021-2022",
+            "closest_date": "2022-06-15",
+            "current_value": "N/A"
+        }
+    ]
+    return render_template("manual_input.html", players=sample_missing, title="Manual Transfer Value Input")
+
+
+# --------------------------
+# Main Entry Point
+# --------------------------
 if __name__ == "__main__":
-    main()
+    app.run(debug=True)
