@@ -89,30 +89,135 @@ def parse_date(date_str: Any) -> Optional[datetime]:
 # =============================================================================
 # Name Normalization Helpers
 # =============================================================================
+def remove_diacritics(s: str) -> str:
+    """Remove diacritic marks from a string while preserving the base characters."""
+    return ''.join(c for c in unicodedata.normalize('NFKD', s) if not unicodedata.combining(c))
+
+
 def normalize_name(name: str) -> str:
     """
-    Normalize a name by performing Unicode normalization (to remove diacritics),
-    replacing German ß with "ss", lowercasing, and removing hyphens, apostrophes, and whitespace.
+    Fully normalize a name by:
+      1. Fixing encoding,
+      2. Removing diacritics,
+      3. Converting to lower-case, and
+      4. Removing hyphens, apostrophes, and all whitespace.
     For example, both "Jan Luca Rumpf" and "Jan-Luca Rumpf" become "janlucarumpf".
     """
     try:
-        name = fix_encoding(name)
-        # Remove diacritics:
-        name = unicodedata.normalize('NFKD', name).encode('ascii', 'ignore').decode('ascii')
+        name = fix_encoding(name).strip()
+        name = remove_diacritics(name)
     except Exception as e:
-        logging.error(f"Error during Unicode normalization for '{name}': {e}")
-    name = name.replace("ß", "ss")
-    name = name.lower()
-    # Remove hyphens, apostrophes, and whitespace.
+        logging.error(f"Error during normalization for '{name}': {e}")
+    name = name.replace("ß", "ss").lower()
     name = re.sub(r"[-']", "", name)
     name = re.sub(r"\s+", "", name)
     return name
 
 
+def normalize_name_keep_spaces(name: str) -> str:
+    """
+    Normalize a name while preserving spaces.
+    Removes diacritics and punctuation (but keeps spaces) and lowercases.
+    """
+    try:
+        name = fix_encoding(name).strip().lower()
+        name = remove_diacritics(name)
+    except Exception as e:
+        logging.error(f"Error during normalization (keep spaces) for '{name}': {e}")
+    name = re.sub(r"[^\w\s]", "", name)
+    return re.sub(r"\s+", " ", name).strip()
+
+
 def get_last_name(full_name: str) -> str:
-    """Extract and normalize the last name from a full name."""
+    """Extract and fully normalize the last name from a full name."""
     parts = full_name.split()
     return normalize_name(parts[-1]) if parts else ""
+
+
+# =============================================================================
+# Candidate Query Generator
+# =============================================================================
+def generate_candidate_queries(player_name: str) -> set:
+    """
+    Generate a comprehensive set of candidate query strings for a given player name.
+
+    This function produces variants including:
+      - The fixed name (as returned by fix_encoding)
+      - Lower-case variants
+      - Variants with punctuation removed
+      - Variants with diacritics removed (using remove_diacritics)
+      - Variants where hyphens are replaced with spaces
+      - Reversed order (for two-part names)
+      - If the name has three or more parts, a variant that hyphenates the first two parts
+      - An "initial plus last name" variant (if possible)
+      - Last name only variants
+    """
+    fixed = fix_encoding(player_name).strip()
+    variants = set()
+
+    # Original variants
+    variants.add(fixed)
+    variants.add(fixed.lower())
+    variants.add(re.sub(r"[^\w\s]", "", fixed))
+    variants.add(re.sub(r"[^\w\s]", "", fixed.lower()))
+
+    # Diacritics removed variants
+    no_diacritics = remove_diacritics(fixed)
+    variants.add(no_diacritics)
+    variants.add(no_diacritics.lower())
+    variants.add(re.sub(r"[^\w\s]", "", no_diacritics))
+    variants.add(re.sub(r"[^\w\s]", "", no_diacritics.lower()))
+
+    # Hyphen replaced with space
+    hyphen_space = fixed.replace("-", " ")
+    variants.add(hyphen_space)
+    variants.add(hyphen_space.lower())
+    variants.add(re.sub(r"[^\w\s]", "", hyphen_space))
+    variants.add(re.sub(r"[^\w\s]", "", hyphen_space.lower()))
+
+    # Fully normalized variant (no spaces)
+    normalized = normalize_name(player_name)
+    variants.add(normalized)
+
+    # Normalized variant keeping spaces
+    norm_spaces = normalize_name_keep_spaces(player_name)
+    variants.add(norm_spaces)
+
+    # For names with two parts, try reversed order
+    parts = fixed.split()
+    if len(parts) == 2:
+        reversed_order = f"{parts[1]} {parts[0]}"
+        variants.add(reversed_order)
+        variants.add(reversed_order.lower())
+        variants.add(re.sub(r"[^\w\s]", "", reversed_order))
+        variants.add(re.sub(r"[^\w\s]", "", reversed_order.lower()))
+    # For names with three or more parts, try hyphenating first two parts
+    if len(parts) >= 3:
+        hyphenated = f"{parts[0]}-{parts[1]} " + " ".join(parts[2:])
+        variants.add(hyphenated)
+        variants.add(hyphenated.lower())
+        variants.add(re.sub(r"[^\w\s]", "", hyphenated))
+        variants.add(re.sub(r"[^\w\s]", "", hyphenated.lower()))
+
+    # Try an "initial plus last name" variant for multi-part names
+    if len(parts) >= 2:
+        initial_last = f"{parts[0][0]} {parts[-1]}"
+        variants.add(initial_last)
+        variants.add(initial_last.lower())
+        variants.add(re.sub(r"[^\w\s]", "", initial_last))
+        variants.add(re.sub(r"[^\w\s]", "", initial_last.lower()))
+
+    # Last name only
+    if parts:
+        last = parts[-1]
+        variants.add(last)
+        variants.add(last.lower())
+        variants.add(re.sub(r"[^\w\s]", "", last))
+        variants.add(re.sub(r"[^\w\s]", "", last.lower()))
+        variants.add(normalize_name(last))
+        variants.add(normalize_name_keep_spaces(last))
+
+    return variants
 
 
 # =============================================================================
@@ -189,27 +294,33 @@ def fetch_player_id_by_last_name(player_name: str, team_name: str) -> Optional[s
 def fetch_player_id(player_name: str, team_name: Optional[str] = None) -> Optional[str]:
     """
     Searches for a player by name via the API and returns the best-matched Player ID.
-    First, it tries the fixed name and a punctuation-stripped alternative.
-    If no match is found and the name consists of exactly two parts, it also tries the reversed name.
-    Next, it attempts additional fallbacks: alternative punctuation handling and lower-case variants.
-    Finally, if a team name is provided, it performs a fallback search by last name.
+
+    This function uses a robust, iterative fallback strategy:
+      1. Try the fixed (encoding-corrected) name and its punctuation-stripped version.
+      2. Try alternative punctuation handling (e.g. replacing hyphens with spaces).
+      3. For names with three or more parts, try a hyphenated variant of the first two parts.
+      4. For two-part names, try the reversed order.
+      5. Try lower-case variants (with and without punctuation).
+      6. Try additional variants generated by the candidate generator.
+      7. If a team name is provided, fall back to a last-name search.
     """
-    # Step 1: Apply encoding fix.
     fixed_name = fix_encoding(player_name)
 
-    # Primary attempts: try fixed name and punctuation-stripped version.
+    # 1. Primary attempts: fixed name and punctuation-stripped version.
     for query in [fixed_name, re.sub(r"[^\w\s]", "", fixed_name)]:
         endpoint = f"players/search/{query}"
         logging.info(f"Searching for Player ID for '{query}'.")
         search_results = make_request_with_retry(endpoint).get("results", [])
         if search_results:
             valid_results = [r for r in search_results if r.get("marketValue")]
-            best_match = valid_results[0] if valid_results else search_results[0]
+            if valid_results:
+                best_match = valid_results[0]
+            else:
+                best_match = search_results[0]
             logging.info(f"Found Player ID {best_match['id']} for '{query}'.")
             return best_match["id"]
 
-    # Step 1.5: Additional fallback with alternative punctuation handling.
-    # Try replacing hyphens with spaces.
+    # 2. Alternative punctuation handling: replace hyphens with spaces.
     alt_name = fixed_name.replace("-", " ")
     if alt_name != fixed_name:
         for query in [alt_name, re.sub(r"[^\w\s]", "", alt_name)]:
@@ -222,7 +333,7 @@ def fetch_player_id(player_name: str, team_name: Optional[str] = None) -> Option
                 logging.info(f"Found Player ID {best_match['id']} for alternative punctuation query '{query}'.")
                 return best_match["id"]
 
-    # For names with three or more parts, try joining the first two with a hyphen.
+    # 3. For names with three or more parts, try a hyphenated variant of the first two parts.
     parts = fixed_name.split()
     if len(parts) >= 3:
         hyphenated = f"{parts[0]}-{parts[1]} " + " ".join(parts[2:])
@@ -236,7 +347,7 @@ def fetch_player_id(player_name: str, team_name: Optional[str] = None) -> Option
                 logging.info(f"Found Player ID {best_match['id']} for hyphenated query '{query}'.")
                 return best_match["id"]
 
-    # Step 2: If the name has exactly two parts, try the reversed order.
+    # 4. For two-part names, try reversed order.
     if len(parts) == 2:
         reversed_name = f"{parts[1]} {parts[0]}"
         logging.info(f"No results for '{fixed_name}'. Trying reversed name: '{reversed_name}'.")
@@ -251,7 +362,7 @@ def fetch_player_id(player_name: str, team_name: Optional[str] = None) -> Option
                 return best_match["id"]
         logging.warning(f"No search results found for reversed name '{reversed_name}'.")
 
-    # Step 3: Try lower-case variants explicitly.
+    # 5. Try lower-case variants explicitly.
     lower_name = fixed_name.lower()
     if lower_name != fixed_name:
         for query in [lower_name, re.sub(r"[^\w\s]", "", lower_name)]:
@@ -264,13 +375,26 @@ def fetch_player_id(player_name: str, team_name: Optional[str] = None) -> Option
                 logging.info(f"Found Player ID {best_match['id']} for lower-case query '{query}'.")
                 return best_match["id"]
 
-    # Step 4: If a team name is provided, perform a fallback search by last name.
+    # 6. Use the candidate generator to try many robust variants.
+    candidates = generate_candidate_queries(player_name)
+    for query in candidates:
+        endpoint = f"players/search/{query}"
+        logging.info(f"Candidate generator search for '{query}'.")
+        search_results = make_request_with_retry(endpoint).get("results", [])
+        if search_results:
+            valid_results = [r for r in search_results if r.get("marketValue")]
+            best_match = valid_results[0] if valid_results else search_results[0]
+            # Optional: you could combine fuzzy matching scores here.
+            logging.info(f"Found Player ID {best_match['id']} using candidate variant '{query}'.")
+            return best_match["id"]
+
+    # 7. If a team name is provided, fallback to a last-name search.
     if team_name:
         fallback_id = fetch_player_id_by_last_name(fixed_name, team_name)
         if fallback_id:
             return fallback_id
 
-    logging.warning(f"No search results found for '{fixed_name}' or its alternatives.")
+    logging.warning(f"No search results found for '{fixed_name}' or any of its alternatives.")
     return None
 
 
