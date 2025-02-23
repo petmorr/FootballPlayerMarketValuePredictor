@@ -50,12 +50,17 @@ def read_input_file(file_path: str) -> Optional[DataFrame]:
 def write_output_file(df: pd.DataFrame, file_path: str) -> None:
     """
     Writes the DataFrame to the ../data/updated folder in Parquet format.
-    Output file is named as <basename>.parquet.
+    The output file name is constructed by replacing the "cleaned_" prefix (if present)
+    with "updated_" to clearly indicate this file contains the updated dataset.
     """
     output_dir = Path("../data/updated")
     output_dir.mkdir(parents=True, exist_ok=True)
     base_name = get_clean_basename(file_path)
-    parquet_path = output_dir / f"{base_name}.parquet"
+    if base_name.startswith("cleaned_"):
+        new_base = "updated_" + base_name[len("cleaned_"):]
+    else:
+        new_base = "updated_" + base_name
+    parquet_path = output_dir / f"{new_base}.parquet"
     df.to_parquet(parquet_path, index=False)
     logging.info(f"Updated dataset saved to Parquet: {parquet_path}")
 

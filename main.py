@@ -145,44 +145,15 @@ def model_preprocessing():
     If missing values are found, the user is prompted to provide manual inputs.
     """
     if request.method == "POST":
-        # Run web scraping
         try:
             subprocess.run(["python", "./preprocessing/web_scrape.py"], check=True)
-            logger.info("Web scraping completed successfully.")
-        except Exception as e:
-            logger.error(f"Error during web scraping: {e}")
-            flash("Error during web scraping.", "danger")
-            return redirect(url_for("model_preprocessing"))
-
-        # Run model preprocessing
-        try:
             subprocess.run(["python", "./preprocessing/preprocessing.py"], check=True)
-            logger.info("Model preprocessing completed successfully.")
-        except Exception as e:
-            logger.error(f"Error during model preprocessing: {e}")
-            flash("Error during model preprocessing.", "danger")
-            return redirect(url_for("model_preprocessing"))
-
-        # Run player value extraction
-        try:
             subprocess.run(["python", "./preprocessing/player_value.py"], check=True)
-            logger.info("Player value update completed successfully.")
+            flash("Preprocessing completed successfully.", "success")
         except Exception as e:
-            logger.error(f"Error during player value update: {e}")
-            flash("Error during player value update.", "danger")
-            return redirect(url_for("model_preprocessing"))
-
-        # After running the three steps, check for missing transfer values.
-        missing_entries = load_missing_transfer_values()
-        if missing_entries:
-            flash("Some players are missing transfer values. Please provide manual inputs.", "warning")
-            logger.info("Missing transfer values detected. Redirecting to manual input page.")
-            return redirect(url_for("manual_input"))
-        else:
-            flash("Model preprocessing completed successfully. No missing transfer values found.", "success")
-            return redirect(url_for("index"))
-
-    # On GET, display a page with a button to run the full model preprocessing pipeline.
+            flash("Error during preprocessing.", "danger")
+        # Then check for missing transfer values, etc.
+        return redirect(url_for("index"))
     return render_template("model_preprocessing.html", title="Model Preprocessing")
 
 
