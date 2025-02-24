@@ -1,233 +1,117 @@
-#!/usr/bin/env python3
 """
-Full Pipeline for Training and Predicting Player Transfer Prices using Linear Regression.
+Full Pipeline for Training and Predicting Player Transfer Prices using an Improved Linear Model.
 
 This script:
-  - Loads and combines updated Parquet datasets.
-  - Selects features and the target ("Market Value").
+  - Loads updated Parquet datasets.
+  - Selects features and the target ("Market Value"), dropping identifiers.
   - Splits the data into training, validation, and test sets.
-  - Trains a Linear Regression model wrapped in a TransformedTargetRegressor (using log1p/expm1)
-    so that all predictions are positive.
-  - Evaluates the model on validation and test sets.
-  - Iterates over each updated file to predict player prices,
-    rounds predictions to two decimal places, and saves the final dataset
-    (with a new column "predicted_market_value") to a dedicated predictions folder.
-
-Make sure your updated Parquet files follow the naming convention "updated_*.parquet" and
-are located in "../data/updated". The predicted files are saved in "../data/predictions/linear_regression".
+  - Builds a preprocessing pipeline.
+  - Trains a Ridge regression model (wrapped in TransformedTargetRegressor with log1p/expm1)
+    using GridSearchCV for hyperparameter tuning.
+  - Evaluates the model using RMSE, R², MAE, MedAE, and MAPE.
+  - Generates predictions concurrently for each updated file and saves them in the 
+    "../data/predictions/linear_regression" folder.
 """
 
-import glob
-import os
-from pathlib import Path
-from typing import Tuple
+from logging_config import configure_logger
 
+logging = configure_logger("linear_regression_model", "linear_regression_model.log")
+
+import os
+import glob
+import time
+from pathlib import Path
 import joblib
 import numpy as np
-import pandas as pd
-from sklearn.compose import ColumnTransformer, TransformedTargetRegressor
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import mean_squared_error, r2_score
-from sklearn.model_selection import train_test_split
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.compose import TransformedTargetRegressor
+from sklearn.linear_model import Ridge
+from sklearn.model_selection import GridSearchCV
 
-import logging
+from model_utils import (load_updated_data, select_features_and_target, build_preprocessor,
+                         split_data, evaluate_model, predict_on_file)
 
-# Setup logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-logger = logging.getLogger(__name__)
-
-# -------------------------------
-# Paths and Global Constants
-# -------------------------------
+# Global paths and constants
 UPDATED_DIR = "../data/updated"
 PREDICTIONS_DIR = "../data/predictions/linear_regression"
-# Ensure predictions folder exists
 Path(PREDICTIONS_DIR).mkdir(parents=True, exist_ok=True)
-
-# Columns to drop when forming features (identifiers and target)
 DROP_COLS = {"player", "league", "season", "born", "country_code", "squad", "Market Value"}
-
-
-# -------------------------------
-# Utility Functions
-# -------------------------------
-
-def load_updated_data(data_dir: str = UPDATED_DIR) -> pd.DataFrame:
-    """
-    Load and concatenate all Parquet files from the updated directory.
-    Assumes files follow the naming convention 'updated_*.parquet'.
-    """
-    file_pattern = os.path.join(data_dir, "updated_*.parquet")
-    files = glob.glob(file_pattern)
-    if not files:
-        logger.error(f"No files found in {data_dir} matching pattern updated_*.parquet")
-        raise FileNotFoundError(f"No files found in {data_dir} matching pattern updated_*.parquet")
-
-    df_list = []
-    for file in files:
-        logger.info(f"Loading {file}")
-        df = pd.read_parquet(file)
-        df_list.append(df)
-    combined_df = pd.concat(df_list, ignore_index=True)
-    logger.info(f"Combined data shape: {combined_df.shape}")
-    return combined_df
-
-
-def select_features_and_target(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.Series]:
-    """
-    Select predictor features and the target variable.
-    Assumes target variable is 'Market Value'.
-    Drops identifiers and metadata that are not useful for prediction.
-    """
-    if "Market Value" not in df.columns:
-        logger.error("The data does not contain a 'Market Value' column.")
-        raise ValueError("The data does not contain a 'Market Value' column.")
-
-    X = df.drop(columns=DROP_COLS, errors="ignore")
-    y = df["Market Value"]
-
-    # Drop rows with missing target values.
-    mask = y.notnull()
-    X, y = X[mask], y[mask]
-
-    logger.info(f"Selected features shape: {X.shape} and target shape: {y.shape}")
-    return X, y
-
-
-def build_preprocessor(X: pd.DataFrame) -> ColumnTransformer:
-    """
-    Build a ColumnTransformer that applies StandardScaler to numeric features
-    and OneHotEncoder (with sparse_output=False) to categorical features.
-    """
-    numeric_features = X.select_dtypes(include=["int64", "float64"]).columns.tolist()
-    categorical_features = X.select_dtypes(include=["object", "category"]).columns.tolist()
-
-    logger.info(f"Numeric features: {numeric_features}")
-    logger.info(f"Categorical features: {categorical_features}")
-
-    numeric_transformer = Pipeline(steps=[("scaler", StandardScaler())])
-    categorical_transformer = Pipeline(steps=[("onehot", OneHotEncoder(handle_unknown="ignore", sparse_output=False))])
-
-    preprocessor = ColumnTransformer(transformers=[
-        ("num", numeric_transformer, numeric_features),
-        ("cat", categorical_transformer, categorical_features)
-    ])
-    return preprocessor
-
-
-def split_data(X: pd.DataFrame, y: pd.Series, random_state: int = 42
-               ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, pd.Series]:
-    """
-    Split the data into training (60%), validation (20%), and testing (20%) sets.
-    """
-    X_train_val, X_test, y_train_val, y_test = train_test_split(X, y, test_size=0.2, random_state=random_state)
-    # 25% of 80% gives 20% for validation.
-    X_train, X_val, y_train, y_val = train_test_split(X_train_val, y_train_val, test_size=0.25,
-                                                      random_state=random_state)
-    logger.info(f"Train shape: {X_train.shape}, Validation shape: {X_val.shape}, Test shape: {X_test.shape}")
-    return X_train, X_val, X_test, y_train, y_val, y_test
-
-
-def evaluate_model(model, X: pd.DataFrame, y: pd.Series, dataset_name: str = "Dataset") -> Tuple[float, float]:
-    """
-    Evaluate the model on a given dataset and log RMSE and R² scores.
-    Returns the RMSE and R².
-    """
-    predictions = model.predict(X)
-    rmse = np.sqrt(mean_squared_error(y, predictions))
-    r2 = r2_score(y, predictions)
-    logger.info(f"{dataset_name} - RMSE: {rmse:.4f}, R²: {r2:.4f}")
-    return rmse, r2
-
-
-def predict_on_file(model, file_path: str) -> None:
-    """
-    Load a single updated file, generate predictions, round them to two decimals,
-    attach the predictions to the original data, and save the result.
-    """
-    logger.info(f"Processing file: {file_path}")
-    df = pd.read_parquet(file_path)
-    df_pred = df.copy()
-
-    # Prepare features (drop the same columns as used in training)
-    X_pred = df.drop(columns=DROP_COLS, errors="ignore")
-    predictions = model.predict(X_pred)
-    # Round predictions to 2 decimal places (currency format)
-    predictions = np.round(predictions, 2)
-    df_pred["predicted_market_value"] = predictions
-
-    base_name = Path(file_path).name
-    output_file = Path(PREDICTIONS_DIR) / f"predicted_{base_name}"
-    df_pred.to_parquet(output_file, index=False)
-    logger.info(f"Saved predictions to: {output_file}")
-
-
-# -------------------------------
-# Training and Prediction Pipeline
-# -------------------------------
 
 def train_and_predict() -> None:
     """
-    Train the Linear Regression model (with a log transformation of the target)
-    and apply it to each updated file to generate final predictions.
+    Trains the improved linear model using Ridge regression (with target log transformation)
+    and generates predictions concurrently across updated files.
     """
-    # Load and combine updated data for training
-    df = load_updated_data()
-    X, y = select_features_and_target(df)
+    # Load and prepare data
+    df = load_updated_data(UPDATED_DIR)
+    X, y = select_features_and_target(df, drop_cols={"player", "league", "season", "born", "country_code", "squad"})
     preprocessor = build_preprocessor(X)
     X_train, X_val, X_test, y_train, y_val, y_test = split_data(X, y, random_state=42)
 
-    # Create a pipeline that transforms the target using log1p/expm1 to ensure positive predictions.
+    # Define Ridge model with target transformation (log1p/expm1)
+    ridge = Ridge(random_state=42)
     regressor = TransformedTargetRegressor(
-        regressor=LinearRegression(),
+        regressor=ridge,
         func=np.log1p,
         inverse_func=np.expm1
     )
-
-    pipeline_lr = Pipeline(steps=[
+    pipeline = Pipeline(steps=[
         ("preprocessor", preprocessor),
         ("regressor", regressor)
     ])
 
-    # Train the model on the training set.
-    pipeline_lr.fit(X_train, y_train)
+    # Hyperparameter tuning using GridSearchCV
+    param_grid = {"regressor__regressor__alpha": [0.1, 1.0, 10.0, 100.0]}
+    grid_search = GridSearchCV(
+        estimator=pipeline,
+        param_grid=param_grid,
+        cv=5,
+        scoring="neg_mean_squared_error",
+        n_jobs=-1,
+        verbose=1
+    )
+    start_time = time.time()
+    logging.info("Starting GridSearchCV for Improved Linear Model...")
+    grid_search.fit(X_train, y_train)
+    elapsed = time.time() - start_time
+    logging.info(f"GridSearchCV completed in {elapsed:.2f} seconds.")
+    logging.info("Best hyperparameters found:")
+    logging.info(grid_search.best_params_)
+    best_model = grid_search.best_estimator_
 
-    # Evaluate the model on validation and test sets.
-    logger.info("Evaluating Linear Regression Model on Validation Set")
-    evaluate_model(pipeline_lr, X_val, y_val, dataset_name="Validation (LR)")
+    # Evaluate the model on validation and test sets
+    logging.info("Evaluating Improved Linear Model on Validation Set:")
+    evaluate_model(best_model, X_val, y_val, dataset_name="Validation (Improved LR)")
+    logging.info("Evaluating Improved Linear Model on Test Set:")
+    evaluate_model(best_model, X_test, y_test, dataset_name="Test (Improved LR)")
 
-    logger.info("Evaluating Linear Regression Model on Test Set")
-    evaluate_model(pipeline_lr, X_test, y_test, dataset_name="Test (LR)")
-
-    # Optionally, save the trained model for later use.
+    # Save the trained model
     model_path = "linear_regression_model.pkl"
-    joblib.dump(pipeline_lr, model_path)
-    logger.info(f"Linear Regression model saved to {model_path}")
+    joblib.dump(best_model, model_path)
+    logging.info(f"Improved Linear Regression model saved to {model_path}")
 
-    # Now, run predictions on each updated file.
+    # Generate predictions concurrently for each updated file
     file_pattern = os.path.join(UPDATED_DIR, "updated_*.parquet")
     files = glob.glob(file_pattern)
     if not files:
-        logger.error(f"No updated files found in {UPDATED_DIR}")
+        logging.error(f"No updated files found in {UPDATED_DIR}")
         return
 
-    for file_path in files:
-        predict_on_file(pipeline_lr, file_path)
-
-    logger.info("Prediction process completed for all files.")
-
-
-# -------------------------------
-# Main Entry Point
-# -------------------------------
+    # Use ThreadPoolExecutor to run predictions concurrently
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        futures = [executor.submit(predict_on_file, best_model, file_path, DROP_COLS, PREDICTIONS_DIR)
+                   for file_path in files]
+        for future in as_completed(futures):
+            # This will raise any exceptions encountered during prediction.
+            future.result()
+    logging.info("Prediction process completed for all files.")
 
 def main() -> None:
-    logger.info("Starting full training and prediction pipeline for Linear Regression Model")
+    logging.info("Starting full training and prediction pipeline for Improved Linear Regression Model")
     train_and_predict()
-    logger.info("Pipeline completed successfully.")
-
+    logging.info("Pipeline completed successfully.")
 
 if __name__ == "__main__":
     main()
