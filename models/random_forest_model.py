@@ -3,18 +3,18 @@ Full Pipeline for Training and Predicting Player Transfer Prices using Random Fo
 
 This script:
   - Loads updated Parquet datasets.
-  - Selects predictor features and the target ("Market Value"), dropping identifiers.
-  - Splits data into training (60%), validation (20%), and test (20%) sets.
+  - Aggregates duplicate records for the same player (weighted by minutes played).
+  - Computes sample weights to down-weight outliers.
+  - Selects predictor features and the target ("Market Value"), preserving "player" for grouping.
+  - Splits data into training (60%), validation (20%), and test (20%) sets using group-aware splits.
   - Builds a preprocessing pipeline.
   - Trains a Random Forest regressor (wrapped in TransformedTargetRegressor with log1p/expm1)
-    and tunes its hyperparameters via GridSearchCV.
+    and tunes its hyperparameters via GridSearchCV with GroupKFold.
   - Evaluates the model using RMSE, R², MAE, MedAE, and MAPE.
-  - Generates predictions concurrently for each updated file and saves them in the
-    "../data/predictions/random_forest" folder.
+  - Generates predictions concurrently for each updated file and saves them in "../data/predictions/random_forest".
 """
 
 from logging_config import configure_logger
-
 logging = configure_logger("random_forest_model", "random_forest_model.log")
 
 import os
@@ -28,10 +28,10 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from sklearn.pipeline import Pipeline
 from sklearn.compose import TransformedTargetRegressor
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.model_selection import GridSearchCV
+from sklearn.model_selection import GridSearchCV, GroupKFold
 
-from model_utils import (load_updated_data, select_features_and_target, build_preprocessor,
-                         split_data, evaluate_model, predict_on_file)
+from model_utils import (load_updated_data, aggregate_player_records, compute_sample_weights,
+                         select_features_and_target, build_preprocessor, split_data, evaluate_model, predict_on_file)
 
 # Global paths and constants
 UPDATED_DIR = "../data/updated"
@@ -39,20 +39,27 @@ PREDICTIONS_DIR = "../data/predictions/random_forest"
 Path(PREDICTIONS_DIR).mkdir(parents=True, exist_ok=True)
 DROP_COLS = {"player", "league", "season", "born", "country_code", "squad", "Market Value"}
 
-
 def train_and_predict() -> None:
-    """
-    Trains the Random Forest model with hyperparameter tuning (via GridSearchCV)
-    and then generates predictions concurrently for each updated file.
-    """
-    # Load data
+    # Load and aggregate data
     df = load_updated_data(UPDATED_DIR)
-    X, y = select_features_and_target(df, drop_cols={"player", "league", "season", "born", "country_code", "squad"})
+    df_agg = aggregate_player_records(df, weight_col="minutes_played")
+    # Preserve groups for cross validation
+    groups_all = df_agg["player"]
+    # Select features while keeping "player" for grouping
+    X_all, y_all = select_features_and_target(df_agg, drop_cols={"league", "season", "born", "country_code", "squad"})
+    groups_all = X_all["player"]
+    X_all = X_all.drop(columns=["player"], errors="ignore")
+
+    # Split data using GroupShuffleSplit (via our custom split_data function)
+    X_train, X_val, X_test, y_train, y_val, y_test, groups_train, groups_test = split_data(X_all, y_all, groups_all,
+                                                                                           random_state=42)
+
+    # Compute sample weights for training set
+    sample_weights = compute_sample_weights(y_train)
+    
     # Build preprocessor
-    preprocessor = build_preprocessor(X)
-    # Split data
-    X_train, X_val, X_test, y_train, y_val, y_test = split_data(X, y, random_state=42)
-    # Define the Random Forest model wrapped in a TransformedTargetRegressor (for log transformation)
+    preprocessor = build_preprocessor(X_train)
+    # Define Random Forest model wrapped in TransformedTargetRegressor (for log transformation)
     rf = RandomForestRegressor(random_state=42)
     regressor = TransformedTargetRegressor(
         regressor=rf,
@@ -63,7 +70,9 @@ def train_and_predict() -> None:
         ("preprocessor", preprocessor),
         ("regressor", regressor)
     ])
-    # Set up hyperparameter tuning via GridSearchCV
+
+    # Use GroupKFold for cross validation to ensure player records are not split
+    gkf = GroupKFold(n_splits=5)
     param_grid = {
         "regressor__regressor__n_estimators": [100, 200],
         "regressor__regressor__max_depth": [None, 10, 20],
@@ -74,28 +83,31 @@ def train_and_predict() -> None:
     grid_search = GridSearchCV(
         estimator=pipeline,
         param_grid=param_grid,
-        cv=5,
+        cv=gkf.split(X_train, y_train, groups_train),
         scoring="neg_mean_squared_error",
         n_jobs=-1,
         verbose=1
     )
     start_time = time.time()
     logging.info("Starting GridSearchCV for Random Forest regression...")
-    grid_search.fit(X_train, y_train)
+    grid_search.fit(X_train, y_train, regressor__sample_weight=sample_weights)
     elapsed = time.time() - start_time
     logging.info(f"GridSearchCV completed in {elapsed:.2f} seconds.")
     logging.info("Best hyperparameters found:")
     logging.info(grid_search.best_params_)
     best_model = grid_search.best_estimator_
-    # Evaluate the model on validation and test sets
+
+    # Evaluate model on validation and test sets
     logging.info("Evaluating Random Forest Model on Validation Set:")
     evaluate_model(best_model, X_val, y_val, dataset_name="Validation (RF)")
     logging.info("Evaluating Random Forest Model on Test Set:")
     evaluate_model(best_model, X_test, y_test, dataset_name="Test (RF)")
-    # Save the final model
+
+    # Save final model
     model_path = "random_forest_model.pkl"
     joblib.dump(best_model, model_path)
     logging.info(f"Random Forest model saved to {model_path}")
+
     # Generate predictions concurrently for each updated file
     file_pattern = os.path.join(UPDATED_DIR, "updated_*.parquet")
     files = glob.glob(file_pattern)
@@ -106,7 +118,7 @@ def train_and_predict() -> None:
         futures = [executor.submit(predict_on_file, best_model, file_path, DROP_COLS, PREDICTIONS_DIR)
                    for file_path in files]
         for future in as_completed(futures):
-            future.result()  # Raise any exceptions encountered
+            future.result()
     logging.info("Prediction process completed for all files.")
 
 def main() -> None:
