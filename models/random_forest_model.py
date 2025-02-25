@@ -61,11 +61,13 @@ def train_and_predict() -> None:
         # Set up GridSearchCV.
         gkf = GroupKFold(n_splits=5)
         param_grid = {
-            "regressor__regressor__n_estimators": [100, 200],
-            "regressor__regressor__max_depth": [None, 10, 20],
-            "regressor__regressor__min_samples_split": [2, 5],
-            "regressor__regressor__min_samples_leaf": [1, 2],
-            "regressor__regressor__max_features": [None, "sqrt", "log2"]
+            "regressor__regressor__n_estimators": [100, 200, 300, 500],
+            "regressor__regressor__max_depth": [None, 5, 10, 20, 30],
+            "regressor__regressor__min_samples_split": [2, 5, 10],
+            "regressor__regressor__min_samples_leaf": [1, 2, 4],
+            "regressor__regressor__max_features": [None, "sqrt", "log2", 0.5],
+            "regressor__regressor__bootstrap": [True, False],
+            "regressor__regressor__criterion": ["mse", "mae"]
         }
         grid_search = GridSearchCV(estimator=pipeline, param_grid=param_grid,
                                    cv=gkf.split(X_train, y_train, groups_train),
