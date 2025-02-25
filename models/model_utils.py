@@ -25,8 +25,9 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 def load_updated_data(data_dir: str) -> pd.DataFrame:
     """
     Loads and concatenates all Parquet files from the specified folder.
-    Use a preprocessed folder (e.g., "../data/updated/enhanced_feature_engineering").
+    Use an updated folder (e.g., "../data/updated/enhanced_feature_engineering").
     """
+    # Update file pattern to read updated_*.parquet files.
     file_pattern = os.path.join(data_dir, "updated_*.parquet")
     files = glob.glob(file_pattern)
     if not files:

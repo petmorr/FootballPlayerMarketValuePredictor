@@ -3,7 +3,7 @@ Full Pipeline for Training and Predicting Player Transfer Prices using Random Fo
 This script trains and evaluates the model on three preprocessed variants:
   - enhanced_feature_engineering
   - feature_engineering
-  - no feature_engineering
+  - no_feature_engineering
 Performance metrics are saved to a CSV for comparison.
 """
 
@@ -13,6 +13,7 @@ logging = configure_logger("random_forest_model", "random_forest_model.log")
 import os
 import glob
 import time
+from pathlib import Path
 import joblib
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -26,15 +27,22 @@ from sklearn.model_selection import GridSearchCV, GroupKFold
 from model_utils import (load_updated_data, aggregate_player_records, compute_sample_weights,
                          select_features_and_target, build_preprocessor, split_data, evaluate_model, predict_on_file)
 
-# Define the three variants.
+# Update PREPROC_VARIANTS to use the updated data folder.
 PREPROC_VARIANTS = {
     "enhanced_feature_engineering": "../data/updated/enhanced_feature_engineering",
     "feature_engineering": "../data/updated/feature_engineering",
     "no_feature_engineering": "../data/updated/no_feature_engineering"
 }
 
+# Create a results folder inside the current models folder.
+results_folder = Path(__file__).parent / "results"
+results_folder.mkdir(exist_ok=True)
+
 def train_and_predict() -> None:
     performance_records = []  # To collect metrics for CSV
+
+    # Update drop columns: add "rank" and "position" along with other columns.
+    drop_cols = {"league", "season", "born", "country_code", "squad", "rank", "position"}
 
     for variant_name, variant_folder in PREPROC_VARIANTS.items():
         logging.info(f"Processing variant: {variant_name} from folder: {variant_folder}")
@@ -42,14 +50,12 @@ def train_and_predict() -> None:
         df = load_updated_data(variant_folder)
         df_agg = aggregate_player_records(df, weight_col="minutes_played")
         groups_all = df_agg["player"]
-        X_all, y_all = select_features_and_target(df_agg,
-                                                  drop_cols={"league", "season", "born", "country_code", "squad"})
+        X_all, y_all = select_features_and_target(df_agg, drop_cols=drop_cols)
         groups_all = X_all["player"]
         X_all = X_all.drop(columns=["player"], errors="ignore")
 
         # Split data.
-        X_train, X_val, X_test, y_train, y_val, y_test, groups_train, groups_test = split_data(X_all, y_all, groups_all,
-                                                                                               random_state=42)
+        X_train, X_val, X_test, y_train, y_val, y_test, groups_train, groups_test = split_data(X_all, y_all, groups_all, random_state=42)
         sample_weights = compute_sample_weights(y_train)
 
         # Build pipeline.
@@ -67,7 +73,11 @@ def train_and_predict() -> None:
             "regressor__regressor__min_samples_leaf": [1, 2, 4],
             "regressor__regressor__max_features": [None, "sqrt", "log2", 0.5],
             "regressor__regressor__bootstrap": [True, False],
-            "regressor__regressor__criterion": ["mse", "mae"]
+            "regressor__regressor__criterion": ["squared_error", "absolute_error", "friedman_mse", "poisson"],
+            "regressor__regressor__max_leaf_nodes": [None, 10, 20, 50],
+            "regressor__regressor__min_weight_fraction_leaf": [0.0, 0.01, 0.05],
+            "regressor__regressor__max_samples": [None, 0.5, 0.8],
+            "regressor__regressor__ccp_alpha": [0.0, 0.001, 0.01]
         }
         grid_search = GridSearchCV(estimator=pipeline, param_grid=param_grid,
                                    cv=gkf.split(X_train, y_train, groups_train),
@@ -111,31 +121,30 @@ def train_and_predict() -> None:
         })
 
         # Save the trained model.
-        model_path = f"random_forest_model_{variant_name}.pkl"
+        model_path = results_folder / f"random_forest_model_{variant_name}.pkl"
         joblib.dump(best_model, model_path)
         logging.info(f"Random Forest model for variant {variant_name} saved to {model_path}")
 
         # Generate predictions.
-        predictions_dir = f"../data/predictions/random_forest/{variant_name}"
-        os.makedirs(predictions_dir, exist_ok=True)
+        pred_drop_cols = {"player", "league", "season", "born", "country_code", "squad", "rank", "position", "Market Value"}
+        predictions_dir = Path("../data/predictions/random_forest") / variant_name
+        predictions_dir.mkdir(parents=True, exist_ok=True)
+        # Update file pattern to "updated_*.parquet"
         file_pattern = os.path.join(variant_folder, "updated_*.parquet")
         files = glob.glob(file_pattern)
         if not files:
             logging.error(f"No files found in {variant_folder}")
         else:
             with ThreadPoolExecutor(max_workers=10) as executor:
-                futures = [executor.submit(predict_on_file, best_model, file_path,
-                                           {"player", "league", "season", "born", "country_code", "squad",
-                                            "Market Value"},
-                                           predictions_dir)
+                futures = [executor.submit(predict_on_file, best_model, file_path, pred_drop_cols, predictions_dir)
                            for file_path in files]
                 for future in as_completed(futures):
                     future.result()
             logging.info(f"Prediction process completed for variant {variant_name}.")
 
     # Save performance metrics to CSV.
+    csv_path = results_folder / "performance_metrics_random_forest.csv"
     df_perf = pd.DataFrame(performance_records)
-    csv_path = "performance_metrics_random_forest.csv"
     df_perf.to_csv(csv_path, index=False)
     logging.info(f"Performance metrics saved to {csv_path}")
 
