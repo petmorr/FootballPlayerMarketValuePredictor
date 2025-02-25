@@ -22,10 +22,10 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 # -----------------------------------------------------------------------------
 # Data Loading and Preparation Functions
 # -----------------------------------------------------------------------------
-def load_updated_data(data_dir: str = "../data/updated") -> pd.DataFrame:
+def load_updated_data(data_dir: str) -> pd.DataFrame:
     """
-    Loads and concatenates all Parquet files from the specified directory.
-    Assumes file names match the pattern 'updated_*.parquet'.
+    Loads and concatenates all Parquet files from the specified folder.
+    Use a preprocessed folder (e.g., "../data/updated/enhanced_feature_engineering").
     """
     file_pattern = os.path.join(data_dir, "updated_*.parquet")
     files = glob.glob(file_pattern)
@@ -37,12 +37,11 @@ def load_updated_data(data_dir: str = "../data/updated") -> pd.DataFrame:
     logging.info(f"Combined data shape: {combined_df.shape}")
     return combined_df
 
-
 def aggregate_player_records(df: pd.DataFrame, weight_col: str = "minutes_played") -> pd.DataFrame:
     """
     Aggregates duplicate records for the same player (and season, if available)
-    using minutes_played as the weight for numeric features and concatenates
-    squad names for categorical features.
+    using the values in `weight_col` as weights for numeric features.
+    If the weight column is missing, equal weights are used.
     """
     group_cols = ["player"]
     if "season" in df.columns:
@@ -50,20 +49,24 @@ def aggregate_player_records(df: pd.DataFrame, weight_col: str = "minutes_played
 
     def agg_func(group: pd.DataFrame) -> pd.Series:
         result = {}
+        # Determine if weight_col exists in the current group
+        use_weights = weight_col in group.columns
         for col in group.columns:
             if col in group_cols:
                 result[col] = group.iloc[0][col]
             elif pd.api.types.is_numeric_dtype(group[col]):
-                if col == weight_col:
+                if col == weight_col and use_weights:
                     result[col] = group[col].sum()
                 else:
-                    weights = group[weight_col]
+                    if use_weights:
+                        weights = group[weight_col]
+                    else:
+                        weights = pd.Series(1, index=group.index)
                     if weights.sum() > 0:
                         result[col] = np.average(group[col], weights=weights)
                     else:
                         result[col] = group[col].mean()
             else:
-                # For 'squad', concatenate unique team names; otherwise use mode.
                 if col == "squad":
                     teams = group[col].unique()
                     result[col] = "/".join(sorted(teams))
@@ -74,7 +77,6 @@ def aggregate_player_records(df: pd.DataFrame, weight_col: str = "minutes_played
     aggregated_df = df.groupby(group_cols, as_index=False).apply(agg_func)
     logging.info(f"Aggregated data shape (after combining duplicates): {aggregated_df.shape}")
     return aggregated_df
-
 
 def compute_sample_weights(y: pd.Series, factor: float = 1.5) -> np.array:
     """
@@ -97,7 +99,7 @@ def select_features_and_target(df: pd.DataFrame, drop_cols: set = None) -> Tuple
     if "Market Value" not in df.columns:
         logging.error("The data does not contain a 'Market Value' column.")
         raise ValueError("The data does not contain a 'Market Value' column.")
-    # Keep "player" for group-based cross validation; drop others.
+    # Keep "player" for grouping, drop others.
     X = df.drop(columns=drop_cols.union({"Market Value"}), errors="ignore")
     y = df["Market Value"]
     mask = y.notnull()
@@ -111,7 +113,6 @@ def build_preprocessor(X: pd.DataFrame) -> ColumnTransformer:
     scales numeric features, and one-hot encodes categorical features.
     """
     numeric_features = X.select_dtypes(include=["int64", "float64"]).columns.tolist()
-    # Exclude 'player' from preprocessing if present.
     if "player" in numeric_features:
         numeric_features.remove("player")
     categorical_features = X.select_dtypes(include=["object", "category"]).columns.tolist()
@@ -131,15 +132,12 @@ def build_preprocessor(X: pd.DataFrame) -> ColumnTransformer:
     ])
     return preprocessor
 
-
 def split_data(X: pd.DataFrame, y: pd.Series, groups: pd.Series, random_state: int = 42
                ) -> Tuple[
     pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, pd.Series, pd.Series, pd.Series]:
     """
     Splits the data into training (60%), validation (20%), and test (20%) sets.
     Returns X_train, X_val, X_test, y_train, y_val, y_test, groups_train, groups_test.
-    Note: groups are used for cross validation to ensure that records for the same player
-    are not split across folds.
     """
     from sklearn.model_selection import GroupShuffleSplit
     gss = GroupShuffleSplit(test_size=0.2, random_state=random_state)
@@ -148,8 +146,7 @@ def split_data(X: pd.DataFrame, y: pd.Series, groups: pd.Series, random_state: i
     y_train_val, y_test = y.iloc[train_idx], y.iloc[test_idx]
     groups_train_val, groups_test = groups.iloc[train_idx], groups.iloc[test_idx]
 
-    # Further split the training+validation set for validation
-    gss_val = GroupShuffleSplit(test_size=0.25, random_state=random_state)  # 25% of 80% = 20%
+    gss_val = GroupShuffleSplit(test_size=0.25, random_state=random_state)
     train_idx, val_idx = next(gss_val.split(X_train_val, y_train_val, groups_train_val))
     X_train, X_val = X_train_val.iloc[train_idx], X_train_val.iloc[val_idx]
     y_train, y_val = y_train_val.iloc[train_idx], y_train_val.iloc[val_idx]
@@ -160,27 +157,25 @@ def split_data(X: pd.DataFrame, y: pd.Series, groups: pd.Series, random_state: i
 def evaluate_model(model, X: pd.DataFrame, y: pd.Series, dataset_name: str = "Dataset"
                    ) -> Tuple[float, float, float, float, float]:
     """
-    Evaluates the model on the provided dataset using multiple metrics:
-      - RMSE, R², MAE, Median AE, and MAPE.
-    Logs and returns the metrics.
+    Evaluates the model on the provided dataset using RMSE, R², MAE, MedAE, and MAPE.
     """
     predictions = model.predict(X)
     rmse = np.sqrt(mean_squared_error(y, predictions))
     r2 = r2_score(y, predictions)
     mae = mean_absolute_error(y, predictions)
     medae = median_absolute_error(y, predictions)
-    mape = mean_absolute_percentage_error(y, predictions) * 100  # as a percentage
-    logging.info(f"{dataset_name} - RMSE: {rmse:.4f}, R²: {r2:.4f}, MAE: {mae:.4f}, "
-                 f"MedAE: {medae:.4f}, MAPE: {mape:.2f}%")
+    mape = mean_absolute_percentage_error(y, predictions) * 100
+    logging.info(
+        f"{dataset_name} - RMSE: {rmse:.4f}, R²: {r2:.4f}, MAE: {mae:.4f}, MedAE: {medae:.4f}, MAPE: {mape:.2f}%")
     return rmse, r2, mae, medae, mape
 
 def predict_on_file(model, file_path: str, drop_cols: set, predictions_dir: str) -> None:
     """
-    Generates predictions for a single updated file:
+    Generates predictions for a single file:
       - Loads the file.
-      - Prepares the features (dropping the same columns as in training).
-      - Rounds predictions to two decimal places.
-      - Saves the DataFrame with an added "predicted_market_value" column.
+      - Prepares features by dropping specified columns.
+      - Rounds predictions to two decimals.
+      - Saves the file with an added "predicted_market_value" column.
     """
     logging.info(f"Processing file: {file_path}")
     df = pd.read_parquet(file_path)
