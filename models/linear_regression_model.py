@@ -1,29 +1,29 @@
 """
 Full Pipeline for Training and Predicting Player Transfer Prices using an Improved Linear Model.
+
 This script trains and evaluates the model on three preprocessed variants:
   - enhanced_feature_engineering
   - feature_engineering
   - no_feature_engineering
+
 Performance metrics are saved to a CSV for comparison.
 """
 
-from logging_config import configure_logger
-logging = configure_logger("linear_regression_model", "linear_regression_model.log")
-
-import os
 import glob
+import os
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+
 import joblib
 import numpy as np
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import pandas as pd
-
-from sklearn.pipeline import Pipeline
 from sklearn.compose import TransformedTargetRegressor
 from sklearn.linear_model import Ridge
 from sklearn.model_selection import GridSearchCV, GroupKFold
+from sklearn.pipeline import Pipeline
 
+from logging_config import configure_logger
 from model_utils import (
     load_updated_data,
     compute_sample_weights,
@@ -34,47 +34,62 @@ from model_utils import (
     predict_on_file
 )
 
-# Update PREPROC_VARIANTS to use the updated data folder.
+# Configure logger.
+logger = configure_logger("linear_regression_model", "linear_regression_model.log")
+
+# Define updated data folder paths for each preprocessing variant.
 PREPROC_VARIANTS = {
     "enhanced_feature_engineering": "../data/updated/enhanced_feature_engineering",
     "feature_engineering": "../data/updated/feature_engineering",
     "no_feature_engineering": "../data/updated/no_feature_engineering"
 }
 
-# Create a results folder inside the current models folder.
-results_folder = Path(__file__).parent / "results"
-results_folder.mkdir(exist_ok=True)
+# Create a results folder relative to this script.
+RESULTS_FOLDER = Path(__file__).parent / "results"
+RESULTS_FOLDER.mkdir(exist_ok=True)
+
 
 def train_and_predict() -> None:
-    performance_records = []  # List to store performance metrics
+    """
+    Train the Improved Linear Regression model (Ridge) and generate predictions for each data variant.
 
-    # Define drop columns so that "rank" and "position" are not used.
+    This function:
+      - Loads updated data.
+      - Splits data into training, validation, and test sets.
+      - Builds a processing pipeline with grid search.
+      - Evaluates the model.
+      - Saves the best model and performance metrics.
+      - Generates predictions concurrently.
+    """
+    performance_records = []  # List to store performance metrics.
     drop_cols = {"league", "season", "born", "country_code", "squad", "rank", "position"}
 
-    # Loop through each variant.
     for variant_name, variant_folder in PREPROC_VARIANTS.items():
-        logging.info(f"Processing variant: {variant_name} from folder: {variant_folder}")
+        logger.info(f"Processing variant: {variant_name} from folder: {variant_folder}")
 
-        # Load the updated data (already aggregated or as is).
+        # Load the updated data.
         df = load_updated_data(variant_folder)
 
-        # Select features and target, dropping unwanted columns.
+        # Select features and target.
         X_all, y_all = select_features_and_target(df, drop_cols=drop_cols)
         groups_all = X_all["player"]
         X_all = X_all.drop(columns=["player"], errors="ignore")
 
-        # Group-aware splitting.
-        X_train, X_val, X_test, y_train, y_val, y_test, groups_train, groups_test = split_data(
-            X_all, y_all, groups_all, random_state=42)
+        # Split data in a group-aware manner.
+        X_train, X_val, X_test, y_train, y_val, y_test, groups_train, _ = split_data(
+            X_all, y_all, groups_all, random_state=42
+        )
         sample_weights = compute_sample_weights(y_train)
 
-        # Build pipeline.
+        # Build the pipeline.
         preprocessor = build_preprocessor(X_train)
         ridge = Ridge(random_state=42)
-        regressor = TransformedTargetRegressor(regressor=ridge, func=np.log1p, inverse_func=np.expm1)
+        regressor = TransformedTargetRegressor(
+            regressor=ridge, func=np.log1p, inverse_func=np.expm1
+        )
         pipeline = Pipeline(steps=[("preprocessor", preprocessor), ("regressor", regressor)])
 
-        # Configure GridSearchCV.
+        # Configure GridSearchCV using GroupKFold.
         gkf = GroupKFold(n_splits=5)
         param_grid = {
             "regressor__regressor__alpha": [1e-4, 1e-3, 1e-2, 1e-1, 1, 10, 100],
@@ -90,12 +105,13 @@ def train_and_predict() -> None:
             n_jobs=-1,
             verbose=1
         )
+
         start_time = time.time()
-        logging.info(f"Starting GridSearchCV for variant: {variant_name}")
+        logger.info(f"Starting GridSearchCV for variant: {variant_name}")
         grid_search.fit(X_train, y_train, regressor__sample_weight=sample_weights)
         elapsed = time.time() - start_time
-        logging.info(f"GridSearchCV for variant {variant_name} completed in {elapsed:.2f} seconds.")
-        logging.info(f"Best hyperparameters for variant {variant_name}: {grid_search.best_params_}")
+        logger.info(f"GridSearchCV for variant {variant_name} completed in {elapsed:.2f} seconds.")
+        logger.info(f"Best hyperparameters for variant {variant_name}: {grid_search.best_params_}")
         best_model = grid_search.best_estimator_
 
         # Evaluate the model.
@@ -127,9 +143,10 @@ def train_and_predict() -> None:
             "best_params": str(grid_search.best_params_)
         })
 
-        model_path = results_folder / f"linear_regression_model_{variant_name}.pkl"
+        # Save the trained model.
+        model_path = RESULTS_FOLDER / f"linear_regression_model_{variant_name}.pkl"
         joblib.dump(best_model, model_path)
-        logging.info(f"Linear Regression model for variant {variant_name} saved to {model_path}")
+        logger.info(f"Linear Regression model for variant {variant_name} saved to {model_path}")
 
         # Generate predictions.
         pred_drop_cols = {"player", "league", "season", "born", "country_code", "squad", "rank", "position", "Market Value"}
@@ -138,24 +155,29 @@ def train_and_predict() -> None:
         file_pattern = os.path.join(variant_folder, "updated_*.parquet")
         files = glob.glob(file_pattern)
         if not files:
-            logging.error(f"No files found in {variant_folder}")
+            logger.error(f"No files found in {variant_folder}")
         else:
             with ThreadPoolExecutor(max_workers=10) as executor:
-                futures = [executor.submit(predict_on_file, best_model, file_path, pred_drop_cols, predictions_dir)
-                           for file_path in files]
+                futures = [
+                    executor.submit(predict_on_file, best_model, file_path, pred_drop_cols, predictions_dir)
+                    for file_path in files
+                ]
                 for future in as_completed(futures):
                     future.result()
-            logging.info(f"Prediction process completed for variant {variant_name}.")
+            logger.info(f"Prediction process completed for variant {variant_name}.")
 
-    csv_path = results_folder / "performance_metrics_linear_regression.csv"
-    df_perf = pd.DataFrame(performance_records)
-    df_perf.to_csv(csv_path, index=False)
-    logging.info(f"Performance metrics saved to {csv_path}")
+    # Save performance metrics to CSV.
+    csv_path = RESULTS_FOLDER / "performance_metrics_linear_regression.csv"
+    pd.DataFrame(performance_records).to_csv(csv_path, index=False)
+    logger.info(f"Performance metrics saved to {csv_path}")
+
 
 def main() -> None:
-    logging.info("Starting full training and prediction pipeline for Improved Linear Regression Model")
+    """Main function to execute the training and prediction pipeline for the linear regression model."""
+    logger.info("Starting full training and prediction pipeline for Improved Linear Regression Model")
     train_and_predict()
-    logging.info("Pipeline completed successfully.")
+    logger.info("Pipeline completed successfully.")
+
 
 if __name__ == "__main__":
     main()
