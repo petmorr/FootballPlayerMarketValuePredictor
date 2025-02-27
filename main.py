@@ -625,5 +625,6 @@ def run_all():
 if __name__ == "__main__":
     if not start_local_api():
         logger.error("Failed to start local API server. Some functionality may be unavailable.")
-    webbrowser.open_new_tab("http://127.0.0.1:5000/")
+    if os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+        webbrowser.open("http://127.0.0.1:5000/", new=0)
     app.run(debug=True)

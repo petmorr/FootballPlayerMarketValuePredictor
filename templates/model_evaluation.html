@@ -13,88 +13,75 @@
         <div class="card-body">
             <form method="POST">
                 <div class="form-row">
+                    <!-- Model selection -->
                     <div class="form-group col-md-2">
                         <label for="model">Model</label>
                         <select class="form-control" id="model" name="model">
-                            <option if
-                                    search_params.model== value="Linear Regression" {%
-                            'Linear Regression' %}selected{% endif %}>Linear Regression</option>
-                            <option if
-                                    search_params.model== value="Random Forest" {%
-                            'Random Forest' %}selected{% endif %}>Random Forest</option>
+                            <option if search_params.model== value="Linear Regression" {%
+                            "Linear Regression" %}selected{% endif %}>Linear Regression</option>
+                            <option if search_params.model== value="Random Forest" {%
+                            "Random Forest" %}selected{% endif %}>Random Forest</option>
                         </select>
                     </div>
+                    <!-- Feature Engineering variant -->
                     <div class="form-group col-md-2">
                         <label for="fe_variant">Feature Engineering</label>
                         <select class="form-control" id="fe_variant" name="fe_variant">
-                            <option if
-                                    search_params.fe_variant== value="enhanced_feature_engineering" {%
-                            'enhanced_feature_engineering' %}selected{% endif %}>Enhanced</option>
-                            <option if
-                                    search_params.fe_variant== value="feature_engineering" {%
-                            'feature_engineering' %}selected{% endif %}>Basic</option>
-                            <option if
-                                    search_params.fe_variant== value="no_feature_engineering" {%
-                            'no_feature_engineering' %}selected{% endif %}>None</option>
+                            <option if search_params.fe_variant== value="enhanced_feature_engineering" {%
+                            "enhanced_feature_engineering" %}selected{% endif %}>Enhanced</option>
+                            <option if search_params.fe_variant== value="feature_engineering" {%
+                            "feature_engineering" %}selected{% endif %}>Basic</option>
+                            <option if search_params.fe_variant== value="no_feature_engineering" {%
+                            "no_feature_engineering" %}selected{% endif %}>None</option>
                         </select>
                     </div>
+                    <!-- League selection -->
                     <div class="form-group col-md-2">
                         <label for="league">League</label>
                         <select class="form-control" id="league" name="league">
-                            <option if
-                                    search_params.league== value="Premier-League" {%
-                            'Premier-League' %}selected{% endif %}>Premier-League</option>
-                            <option if
-                                    search_params.league== value="La-Liga" {%
-                            'La-Liga' %}selected{% endif %}>La-Liga</option>
-                            <option if
-                                    search_params.league== value="Bundesliga" {%
-                            'Bundesliga' %}selected{% endif %}>Bundesliga</option>
-                            <option if
-                                    search_params.league== value="Ligue-1" {%
-                            'Ligue-1' %}selected{% endif %}>Ligue-1</option>
-                            <option if
-                                    search_params.league== value="Serie-A" {%
-                            'Serie-A' %}selected{% endif %}>Serie-A</option>
+                            <option if search_params.league== value="Premier-League" {%
+                            "Premier-League" %}selected{% endif %}>Premier-League</option>
+                            <option if search_params.league== value="La-Liga" {%
+                            "La-Liga" %}selected{% endif %}>La-Liga</option>
+                            <option if search_params.league== value="Bundesliga" {%
+                            "Bundesliga" %}selected{% endif %}>Bundesliga</option>
+                            <option if search_params.league== value="Ligue-1" {%
+                            "Ligue-1" %}selected{% endif %}>Ligue-1</option>
+                            <option if search_params.league== value="Serie-A" {%
+                            "Serie-A" %}selected{% endif %}>Serie-A</option>
                         </select>
                     </div>
+                    <!-- Season selection -->
                     <div class="form-group col-md-2">
                         <label for="season">Season</label>
                         <select class="form-control" id="season" name="season">
-                            <option if
-                                    search_params.season== value="2019-2020" {%
-                            '2019-2020' %}selected{% endif %}>2019-2020</option>
-                            <option if
-                                    search_params.season== value="2020-2021" {%
-                            '2020-2021' %}selected{% endif %}>2020-2021</option>
-                            <option if
-                                    search_params.season== value="2021-2022" {%
-                            '2021-2022' %}selected{% endif %}>2021-2022</option>
-                            <option if
-                                    search_params.season== value="2022-2023" {%
-                            '2022-2023' %}selected{% endif %}>2022-2023</option>
-                            <option if
-                                    search_params.season== value="2023-2024" {%
-                            '2023-2024' %}selected{% endif %}>2023-2024</option>
+                            <option if search_params.season== value="2019-2020" {%
+                            "2019-2020" %}selected{% endif %}>2019-2020</option>
+                            <option if search_params.season== value="2020-2021" {%
+                            "2020-2021" %}selected{% endif %}>2020-2021</option>
+                            <option if search_params.season== value="2021-2022" {%
+                            "2021-2022" %}selected{% endif %}>2021-2022</option>
+                            <option if search_params.season== value="2022-2023" {%
+                            "2022-2023" %}selected{% endif %}>2022-2023</option>
+                            <option if search_params.season== value="2023-2024" {%
+                            "2023-2024" %}selected{% endif %}>2023-2024</option>
                         </select>
                     </div>
+                    <!-- View type selection -->
                     <div class="form-group col-md-2">
                         <label for="view_type">View Type</label>
                         <select class="form-control" id="view_type" name="view_type">
-                            <option if
-                                    search_params.view_type== value="Raw" {%
-                            'Raw' %}selected{% endif %}>Raw</option>
-                            <option if
-                                    search_params.view_type== value="Predicted" {%
-                            'Predicted' %}selected{% endif %}>Predicted</option>
+                            <option if search_params.view_type== value="Raw" {%
+                            "Raw" %}selected{% endif %}>Raw</option>
+                            <option if search_params.view_type== value="Predicted" {%
+                            "Predicted" %}selected{% endif %}>Predicted</option>
                         </select>
                     </div>
                 </div>
                 <div class="form-group">
                     <label for="search_term">Player Name (or part of name):</label>
                     <input class="form-control" id="search_term" name="search_term" placeholder="e.g., Cole Palmer"
-                           type="text"
-                           value="{{ search_params.search_term if search_params.search_term else '' }}">
+                           type="text" value="{{ search_params.search_term if search_params.search_term else '' }}">
                 </div>
                 <button class="btn btn-primary" type="submit">Search</button>
             </form>
