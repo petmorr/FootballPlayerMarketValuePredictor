@@ -26,7 +26,6 @@ from sklearn.model_selection import GridSearchCV, GroupKFold
 
 from model_utils import (
     load_updated_data,
-    aggregate_player_records,
     compute_sample_weights,
     select_features_and_target,
     build_preprocessor,
@@ -56,29 +55,26 @@ def train_and_predict() -> None:
     for variant_name, variant_folder in PREPROC_VARIANTS.items():
         logging.info(f"Processing variant: {variant_name} from folder: {variant_folder}")
 
-        # Load and aggregate data.
+        # Load the updated data (already aggregated or as is).
         df = load_updated_data(variant_folder)
-        df_agg = aggregate_player_records(df, weight_col="minutes_played")
-        groups_all = df_agg["player"]
 
         # Select features and target, dropping unwanted columns.
-        X_all, y_all = select_features_and_target(df_agg, drop_cols=drop_cols)
+        X_all, y_all = select_features_and_target(df, drop_cols=drop_cols)
         groups_all = X_all["player"]
         X_all = X_all.drop(columns=["player"], errors="ignore")
 
-        # Split data using group-aware splitting.
+        # Group-aware splitting.
         X_train, X_val, X_test, y_train, y_val, y_test, groups_train, groups_test = split_data(
             X_all, y_all, groups_all, random_state=42)
         sample_weights = compute_sample_weights(y_train)
 
-        # Build the pipeline.
+        # Build pipeline.
         preprocessor = build_preprocessor(X_train)
-        # Use a Ridge regressor with hyperparameters tuned via grid search.
         ridge = Ridge(random_state=42)
         regressor = TransformedTargetRegressor(regressor=ridge, func=np.log1p, inverse_func=np.expm1)
         pipeline = Pipeline(steps=[("preprocessor", preprocessor), ("regressor", regressor)])
 
-        # Configure GridSearchCV with an expanded hyperparameter grid.
+        # Configure GridSearchCV.
         gkf = GroupKFold(n_splits=5)
         param_grid = {
             "regressor__regressor__alpha": [1e-4, 1e-3, 1e-2, 1e-1, 1, 10, 100],
@@ -102,11 +98,10 @@ def train_and_predict() -> None:
         logging.info(f"Best hyperparameters for variant {variant_name}: {grid_search.best_params_}")
         best_model = grid_search.best_estimator_
 
-        # Evaluate the model on Validation and Test sets.
+        # Evaluate the model.
         val_metrics = evaluate_model(best_model, X_val, y_val, dataset_name=f"Validation ({variant_name} - LR)")
         test_metrics = evaluate_model(best_model, X_test, y_test, dataset_name=f"Test ({variant_name} - LR)")
 
-        # Record performance metrics.
         performance_records.append({
             "variant": variant_name,
             "dataset": "Validation",
@@ -132,17 +127,14 @@ def train_and_predict() -> None:
             "best_params": str(grid_search.best_params_)
         })
 
-        # Save the trained model for this variant.
         model_path = results_folder / f"linear_regression_model_{variant_name}.pkl"
         joblib.dump(best_model, model_path)
         logging.info(f"Linear Regression model for variant {variant_name} saved to {model_path}")
 
-        # Generate predictions concurrently.
-        # For prediction, drop additional columns: remove "player", "league", "season", "born", "country_code", "squad", "rank", "position", "Market Value".
+        # Generate predictions.
         pred_drop_cols = {"player", "league", "season", "born", "country_code", "squad", "rank", "position", "Market Value"}
         predictions_dir = Path("../data/predictions/linear_regression") / variant_name
         predictions_dir.mkdir(parents=True, exist_ok=True)
-        # Use updated_*.parquet file pattern.
         file_pattern = os.path.join(variant_folder, "updated_*.parquet")
         files = glob.glob(file_pattern)
         if not files:
@@ -155,7 +147,6 @@ def train_and_predict() -> None:
                     future.result()
             logging.info(f"Prediction process completed for variant {variant_name}.")
 
-    # Save all performance metrics to a CSV file.
     csv_path = results_folder / "performance_metrics_linear_regression.csv"
     df_perf = pd.DataFrame(performance_records)
     df_perf.to_csv(csv_path, index=False)

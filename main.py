@@ -283,8 +283,28 @@ def manual_input():
 def model_creation():
     if request.method == "POST":
         model_choice = request.form.get("model_choice")
-        flash(f"Model creation triggered for {model_choice} (functionality not yet implemented).", "info")
-        logger.info(f"Model creation triggered: {model_choice} (placeholder).")
+        # Run the corresponding model training script based on the selection.
+        if model_choice == "LinearRegression":
+            if run_command(["python", "./models/linear_regression_model.py"]):
+                flash("Linear Regression model created successfully.", "success")
+                logger.info("Linear Regression model creation succeeded.")
+            else:
+                flash("Linear Regression model creation failed.", "danger")
+                logger.error("Linear Regression model creation failed.")
+        elif model_choice == "RandomForest":
+            if run_command(["python", "./models/random_forest_model.py"]):
+                flash("Random Forest model created successfully.", "success")
+                logger.info("Random Forest model creation succeeded.")
+            else:
+                flash("Random Forest model creation failed.", "danger")
+                logger.error("Random Forest model creation failed.")
+        elif model_choice == "RecurrentNeuralNetwork":
+            # Placeholder: DNN functionality is not yet implemented.
+            flash("Recurrent Neural Network (DNN) model functionality is not yet implemented.", "info")
+            logger.info("DNN model creation triggered (not yet implemented).")
+        else:
+            flash("Unknown model choice.", "warning")
+            logger.warning("Unknown model choice selected in model_creation.")
         return redirect(url_for("model_creation"))
     return render_template("model_creation.html", title="Model Creation")
 
@@ -335,15 +355,15 @@ def view_logs():
     for log_name, file_path in log_files.items():
         if file_path.exists():
             try:
-                with open(file_path, "r", encoding="utf-8") as f:
+                with open(file_path, "r", encoding="latin1") as f:
                     logs_content[log_name] = f.read()
             except UnicodeDecodeError as e:
-                logger.error(f"UTF-8 decoding failed for {file_path}: {e}. Trying latin1 encoding.")
+                logger.error(f"latin1 decoding failed for {file_path}: {e}. Trying UTF-8 encoding.")
                 try:
-                    with open(file_path, "r", encoding="latin1") as f:
+                    with open(file_path, "r", encoding="UTF-8") as f:
                         logs_content[log_name] = f.read()
                 except Exception as e2:
-                    logger.error(f"Error reading log file {file_path} with latin1: {e2}")
+                    logger.error(f"Error reading log file {file_path} with UTF-8: {e2}")
                     logs_content[log_name] = f"Error reading log file: {e2}"
             except Exception as e:
                 logger.error(f"Error reading log file {file_path}: {e}")
