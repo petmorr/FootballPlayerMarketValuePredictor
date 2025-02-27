@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Logs - Peter Morris Honours Project{% endblock %}
+
+{% block content %}
+<div class="mt-3">
+    <h2>Application Logs</h2>
+    <p>This console displays the contents of the web portal log file (web_portal.log). The page will auto-refresh every
+        5 seconds.</p>
+    <pre style="background: #000; color: #0f0; padding: 1em; height: 500px; overflow-y: scroll;">{{ logs }}</pre>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Auto-refresh every 5 seconds
+    setInterval(function () {
+        window.location.reload();
+    }, 5000);
+</script>
+{% endblock %}

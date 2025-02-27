@@ -11,12 +11,18 @@ from flask import Flask, render_template, request, redirect, url_for, flash
 
 from logging_config import configure_logger
 
+
 # Ensure BeautifulSoup is available; install it if necessary.
-try:
-    from bs4 import BeautifulSoup, Comment
-except ImportError:
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "beautifulsoup4"])
-    from bs4 import BeautifulSoup, Comment
+def ensure_module(module_name, package_name=None):
+    try:
+        __import__(module_name)
+    except ImportError:
+        pkg = package_name if package_name else module_name
+        subprocess.check_call([sys.executable, "-m", "pip", "install", pkg])
+        __import__(module_name)
+
+
+ensure_module("bs4", "beautifulsoup4")
 
 # Initialize logger and Flask application.
 logger = configure_logger("web_portal", "web_portal.log")
@@ -28,28 +34,35 @@ UPDATED_DATA_DIR = Path("data/updated")
 
 
 # =============================================================================
+# Helper function to run external commands using the same interpreter
+# =============================================================================
+def run_command(command):
+    """
+    Runs a command using the current Python interpreter.
+    For example, instead of calling ["python", "script.py"],
+    we call [sys.executable, "script.py"].
+    Returns True if the command executes successfully.
+    """
+    full_command = [sys.executable] + command[1:] if command[0].lower() == "python" else command
+    try:
+        logger.info(f"Running command: {' '.join(full_command)}")
+        subprocess.check_call(full_command)
+        return True
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Command {' '.join(full_command)} failed: {e}")
+        return False
+
+# =============================================================================
 # Helper Functions for Manual Transfer Value Input
 # =============================================================================
 def get_clean_basename(file_path: str) -> str:
-    """
-    Returns the base name of a file (without its extension).
-    Example: "cleaned_Bundesliga_2019-2020.parquet" becomes "cleaned_Bundesliga_2019-2020".
-    """
     p = Path(file_path)
     return p.name.split('.')[0] if len(p.suffixes) > 1 else p.stem
 
-
 def load_missing_transfer_values():
-    """
-    Scans each updated dataset (Parquet or gzipped CSV) in UPDATED_DATA_DIR for rows
-    where the "market value" column is missing.
-
-    Returns:
-        A list of dictionaries, each with details about one missing entry.
-    """
     missing_entries = []
     for file in UPDATED_DATA_DIR.glob("updated_*"):
-        base_name = get_clean_basename(file.name)  # e.g., "updated_Bundesliga_2019-2020"
+        base_name = get_clean_basename(file.name)
         parts = base_name.split("_")
         league = parts[1] if len(parts) >= 3 else "Unknown"
         season = parts[2] if len(parts) >= 3 else "Unknown"
@@ -64,7 +77,6 @@ def load_missing_transfer_values():
             logger.error(f"Error reading {file}: {e}")
             continue
 
-        # Normalize column names.
         df.columns = [col.lower() for col in df.columns]
         if "market value" not in df.columns:
             logger.warning(f"'market value' column not found in {file.name}; skipping.")
@@ -83,29 +95,14 @@ def load_missing_transfer_values():
             missing_entries.append(entry)
     return missing_entries
 
-
 def group_missing_entries(missing_entries):
-    """
-    Groups missing transfer value entries by dataset.
-
-    Returns:
-        A dictionary with dataset names as keys and lists of entries as values.
-    """
     grouped = {}
     for entry in missing_entries:
         ds = entry["dataset"]
         grouped.setdefault(ds, []).append(entry)
     return grouped
 
-
 def update_transfer_value_in_parquet(dataset, season, updates):
-    """
-    For the given dataset (e.g. "Bundesliga_2019-2020") and season, updates rows in the
-    corresponding parquet file (in UPDATED_DATA_DIR) with manually entered transfer values.
-
-    Returns:
-        True if the update was successful; otherwise, False.
-    """
     filename = f"updated_{dataset}.parquet"
     file_path = UPDATED_DATA_DIR / filename
     if not file_path.exists():
@@ -135,39 +132,17 @@ def update_transfer_value_in_parquet(dataset, season, updates):
         return False
     return True
 
-
 # =============================================================================
 # API Server Startup Functions
 # =============================================================================
 def check_api_running():
-    """
-    Checks if the Transfermarkt API server is running at http://localhost:8000.
-
-    Returns:
-        True if the server responds with status code 200; otherwise, False.
-    """
     try:
         response = requests.get("http://localhost:8000", timeout=3)
         return response.status_code == 200
     except Exception:
         return False
 
-
 def start_local_api():
-    """
-    Starts the Transfermarkt API server using Poetry (if not already running).
-    This function assumes that the 'transfermarkt-api' repository exists as a submodule.
-
-    Steps:
-      1. If the repository does not exist, clone it.
-      2. Install the API dependencies using "poetry install --no-root".
-      3. Append the current directory to PYTHONPATH.
-      4. Start the API server using "poetry run python app/main.py" in the background.
-      5. Open the API URL in the default browser.
-
-    Returns:
-        True if the API server starts successfully; otherwise, False.
-    """
     if check_api_running():
         logger.info("API server already running. Skipping startup.")
         return True
@@ -176,7 +151,8 @@ def start_local_api():
     if not api_repo_dir.exists():
         logger.info("Cloning transfermarkt-api repository...")
         try:
-            subprocess.check_call(["git", "clone", "https://github.com/felipeall/transfermarkt-api.git"])
+            subprocess.check_call(
+                [sys.executable, "-m", "git", "clone", "https://github.com/felipeall/transfermarkt-api.git"])
         except Exception as e:
             logger.error(f"Error cloning repository: {e}")
             return False
@@ -186,18 +162,19 @@ def start_local_api():
     try:
         logger.info("Installing API dependencies via Poetry...")
         subprocess.check_call(["poetry", "install", "--no-root"], cwd=str(api_repo_dir))
+        logger.info("Running poetry check to verify dependencies...")
+        subprocess.check_call(["poetry", "check"], cwd=str(api_repo_dir))
     except Exception as e:
-        logger.error(f"Error installing API dependencies: {e}")
+        logger.error(f"Error installing or verifying API dependencies: {e}")
         return False
 
-    # Append the current directory to PYTHONPATH.
     current_dir = os.getcwd()
     os.environ["PYTHONPATH"] = os.environ.get("PYTHONPATH", "") + os.pathsep + current_dir
 
     try:
         logger.info("Starting API server using Poetry...")
         subprocess.Popen(["poetry", "run", "python", "app/main.py"], cwd=str(api_repo_dir))
-        time.sleep(5)  # Wait for the API server to start.
+        time.sleep(5)
         if not check_api_running():
             logger.error("API server did not start successfully.")
             return False
@@ -208,22 +185,14 @@ def start_local_api():
         logger.error(f"Error starting API server: {e}")
         return False
 
-
-# =============================================================================
-# Automatic Initialization via Flask
-# =============================================================================
 @app.before_request
 def run_preprocessing_once():
-    """
-    Runs before the first Flask request to ensure the API server is running.
-    """
     if not app.config.get("PREPROCESSING_DONE"):
         if not start_local_api():
             flash("Failed to start local API server. Some functionality may be unavailable.", "danger")
         else:
             flash("Local API server started and backend initialized.", "success")
         app.config["PREPROCESSING_DONE"] = True
-
 
 # =============================================================================
 # Flask Routes
@@ -232,21 +201,19 @@ def run_preprocessing_once():
 def index():
     return render_template("index.html", title="Home")
 
-
 @app.route("/model_preprocessing", methods=["GET", "POST"])
 def model_preprocessing():
-    """
-    Combines web scraping, preprocessing, and player value extraction.
-    Checks that the API server is running before executing the scripts.
-    """
     if request.method == "POST":
         if not check_api_running():
             flash("API server is not running. Please start it manually.", "danger")
             return redirect(url_for("model_preprocessing"))
         try:
-            subprocess.check_call(["python", "./preprocessing/web_scrape.py"])
-            subprocess.check_call(["python", "./preprocessing/preprocessing.py"])
-            subprocess.check_call(["python", "./preprocessing/player_value.py"])
+            if not run_command(["python", "./preprocessing/web_scrape.py"]):
+                raise Exception("Web scraping failed.")
+            if not run_command(["python", "./preprocessing/preprocessing.py"]):
+                raise Exception("Preprocessing failed.")
+            if not run_command(["python", "./preprocessing/player_value.py"]):
+                raise Exception("Player value update failed.")
             flash("Preprocessing completed successfully.", "success")
         except Exception as e:
             flash("Error during preprocessing.", "danger")
@@ -262,12 +229,8 @@ def model_preprocessing():
             return redirect(url_for("index"))
     return render_template("model_preprocessing.html", title="Model Preprocessing")
 
-
 @app.route("/manual_input", methods=["GET", "POST"])
 def manual_input():
-    """
-    Renders a form for manual input of missing transfer values.
-    """
     if request.method == "POST":
         players = request.form.getlist("player")
         teams = request.form.getlist("team")
@@ -303,12 +266,8 @@ def manual_input():
         return render_template("manual_input.html", grouped_missing=grouped_missing,
                                title="Manual Transfer Value Input")
 
-
 @app.route("/model_creation", methods=["GET", "POST"])
 def model_creation():
-    """
-    Placeholder route for model creation.
-    """
     if request.method == "POST":
         model_choice = request.form.get("model_choice")
         flash(f"Model creation triggered for {model_choice} (functionality not yet implemented).", "info")
@@ -316,37 +275,53 @@ def model_creation():
         return redirect(url_for("model_creation"))
     return render_template("model_creation.html", title="Model Creation")
 
-
 @app.route("/model_evaluation", methods=["GET", "POST"])
 def model_evaluation():
-    """
-    Placeholder route for model evaluation.
-    """
     if request.method == "POST":
         flash("Model evaluation functionality is not yet implemented.", "info")
         logger.info("Model evaluation triggered (placeholder).")
         return redirect(url_for("model_evaluation"))
     return render_template("model_evaluation.html", title="Model Evaluation")
 
-
 @app.route("/run_all", methods=["GET", "POST"])
 def run_all():
-    """
-    Placeholder route for running the full pipeline.
-    """
     if request.method == "POST":
-        flash("Full pipeline run functionality is not yet implemented.", "info")
-        logger.info("Full pipeline run triggered (placeholder).")
+        steps = [
+            (["python", "./preprocessing/web_scrape.py"], "Web scraping"),
+            (["python", "./preprocessing/preprocessing.py"], "Preprocessing"),
+            (["python", "./preprocessing/player_value.py"], "Player value update"),
+            (["python", "./models/linear_regression_model.py"], "Linear Regression model training"),
+            (["python", "./models/random_forest_model.py"], "Random Forest model training")
+        ]
+        for cmd, description in steps:
+            if not run_command(cmd):
+                flash(f"{description} failed.", "danger")
+                logger.error(f"{description} failed.")
+                return redirect(url_for("run_all"))
+            else:
+                flash(f"{description} completed successfully.", "success")
+        flash("Full pipeline executed successfully.", "success")
         return redirect(url_for("index"))
     return render_template("run_all.html", title="Run Full Pipeline")
 
 
-# =============================================================================
-# Main Entry Point
-# =============================================================================
+@app.route("/logs")
+def view_logs():
+    log_file = Path("web_portal.log")
+    if log_file.exists():
+        try:
+            with open(log_file, "r", encoding="utf-8") as f:
+                logs = f.read()
+        except Exception as e:
+            logger.error(f"Error reading log file: {e}")
+            logs = f"Error reading log file: {e}"
+    else:
+        logs = "Log file not found."
+    return render_template("logs.html", logs=logs)
+
 if __name__ == "__main__":
-    # Attempt to start the local API server.
     if not start_local_api():
         logger.error("Failed to start local API server. Some functionality may be unavailable.")
-    # Start the Flask web server.
+    if os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+        webbrowser.open("http://127.0.0.1:5000/")
     app.run(debug=True)
