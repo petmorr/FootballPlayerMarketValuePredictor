@@ -39,18 +39,31 @@ UPDATED_DATA_DIR = Path("data/updated")
 def run_command(command):
     """
     Runs a command using the current Python interpreter.
-    For example, instead of calling ["python", "script.py"],
-    we call [sys.executable, "script.py"].
+    If the command is of the form ["python", "script_path", ...],
+    sets the working directory to the folder containing the script and
+    replaces the script argument with its basename.
     Returns True if the command executes successfully.
     """
-    full_command = [sys.executable] + command[1:] if command[0].lower() == "python" else command
+    cwd = None
+    if command[0].lower() == "python" and len(command) > 1:
+        # Get the full path of the script.
+        script_path = Path(command[1])
+        # Set the working directory to the directory that contains the script.
+        cwd = str(script_path.parent.resolve())
+        # Replace the script argument with its basename.
+        new_script = str(script_path.name)
+        full_command = [sys.executable, new_script] + command[2:]
+    else:
+        full_command = command
+
     try:
-        logger.info(f"Running command: {' '.join(full_command)}")
-        subprocess.check_call(full_command)
+        logger.info(f"Running command: {' '.join(full_command)} (cwd={cwd})")
+        subprocess.check_call(full_command, cwd=cwd)
         return True
     except subprocess.CalledProcessError as e:
         logger.error(f"Command {' '.join(full_command)} failed: {e}")
         return False
+
 
 # =============================================================================
 # Helper Functions for Manual Transfer Value Input
@@ -307,17 +320,38 @@ def run_all():
 
 @app.route("/logs")
 def view_logs():
-    log_file = Path("web_portal.log")
-    if log_file.exists():
-        try:
-            with open(log_file, "r", encoding="utf-8") as f:
-                logs = f.read()
-        except Exception as e:
-            logger.error(f"Error reading log file: {e}")
-            logs = f"Error reading log file: {e}"
-    else:
-        logs = "Log file not found."
-    return render_template("logs.html", logs=logs)
+    # Define log file mappings. Adjust paths as needed.
+    log_files = {
+        "Web Portal": Path("logging/web_portal.log"),
+        "Web Scrape": Path("preprocessing/logging/web_scrape.log"),
+        "Preprocessing": Path("preprocessing/logging/preprocessing.log"),
+        "Player Value": Path("preprocessing/logging/player_value.log"),
+        "Linear Regression": Path("models/logging/linear_regression_model.log"),
+        "Random Forest": Path("models/logging/random_forest_model.log"),
+        # Add other logs here as needed.
+    }
+
+    logs_content = {}
+    for log_name, file_path in log_files.items():
+        if file_path.exists():
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    logs_content[log_name] = f.read()
+            except UnicodeDecodeError as e:
+                logger.error(f"UTF-8 decoding failed for {file_path}: {e}. Trying latin1 encoding.")
+                try:
+                    with open(file_path, "r", encoding="latin1") as f:
+                        logs_content[log_name] = f.read()
+                except Exception as e2:
+                    logger.error(f"Error reading log file {file_path} with latin1: {e2}")
+                    logs_content[log_name] = f"Error reading log file: {e2}"
+            except Exception as e:
+                logger.error(f"Error reading log file {file_path}: {e}")
+                logs_content[log_name] = f"Error reading log file: {e}"
+        else:
+            logs_content[log_name] = "Log file not found."
+    return render_template("logs.html", logs=logs_content)
+
 
 if __name__ == "__main__":
     if not start_local_api():
