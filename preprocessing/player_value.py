@@ -380,7 +380,7 @@ def validate_market_value(market_values: List[Dict[str, Any]], team_name: str, s
 
 
 # =============================================================================
-# Player Processing & Aggregation
+# Player Processing
 # =============================================================================
 def process_player(player_name: str, team_name: str) -> Optional[List[Dict[str, Any]]]:
     fixed_name = fix_encoding(player_name)
