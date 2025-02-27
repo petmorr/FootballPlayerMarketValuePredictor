@@ -38,47 +38,6 @@ def load_updated_data(data_dir: str) -> pd.DataFrame:
     logging.info(f"Combined data shape: {combined_df.shape}")
     return combined_df
 
-def aggregate_player_records(df: pd.DataFrame, weight_col: str = "minutes_played") -> pd.DataFrame:
-    """
-    Aggregates duplicate records for the same player (and season, if available)
-    using the values in `weight_col` as weights for numeric features.
-    If the weight column is missing, equal weights are used.
-    """
-    group_cols = ["player"]
-    if "season" in df.columns:
-        group_cols.append("season")
-
-    def agg_func(group: pd.DataFrame) -> pd.Series:
-        result = {}
-        # Determine if weight_col exists in the current group
-        use_weights = weight_col in group.columns
-        for col in group.columns:
-            if col in group_cols:
-                result[col] = group.iloc[0][col]
-            elif pd.api.types.is_numeric_dtype(group[col]):
-                if col == weight_col and use_weights:
-                    result[col] = group[col].sum()
-                else:
-                    if use_weights:
-                        weights = group[weight_col]
-                    else:
-                        weights = pd.Series(1, index=group.index)
-                    if weights.sum() > 0:
-                        result[col] = np.average(group[col], weights=weights)
-                    else:
-                        result[col] = group[col].mean()
-            else:
-                if col == "squad":
-                    teams = group[col].unique()
-                    result[col] = "/".join(sorted(teams))
-                else:
-                    result[col] = group[col].mode().iloc[0] if not group[col].mode().empty else group[col].iloc[0]
-        return pd.Series(result)
-
-    aggregated_df = df.groupby(group_cols, as_index=False).apply(agg_func)
-    logging.info(f"Aggregated data shape (after combining duplicates): {aggregated_df.shape}")
-    return aggregated_df
-
 def compute_sample_weights(y: pd.Series, factor: float = 1.5) -> np.array:
     """
     Computes sample weights inversely proportional to the deviation from the median.

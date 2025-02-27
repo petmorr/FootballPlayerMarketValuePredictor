@@ -67,17 +67,16 @@ def train_and_predict() -> None:
         # Set up GridSearchCV.
         gkf = GroupKFold(n_splits=5)
         param_grid = {
-            "regressor__regressor__n_estimators": [100, 200, 300, 500],
-            "regressor__regressor__max_depth": [None, 5, 10, 20, 30],
-            "regressor__regressor__min_samples_split": [2, 5, 10],
-            "regressor__regressor__min_samples_leaf": [1, 2, 4],
-            "regressor__regressor__max_features": [None, "sqrt", "log2", 0.5],
+            "regressor__regressor__n_estimators": [100, 300],
+            "regressor__regressor__max_depth": [None, 10],
+            "regressor__regressor__min_samples_split": [2, 10],
+            "regressor__regressor__min_samples_leaf": [1, 4],
+            "regressor__regressor__max_features": [None, "sqrt"],
             "regressor__regressor__bootstrap": [True, False],
-            "regressor__regressor__criterion": ["squared_error", "absolute_error", "friedman_mse", "poisson"],
-            "regressor__regressor__max_leaf_nodes": [None, 10, 20, 50],
-            "regressor__regressor__min_weight_fraction_leaf": [0.0, 0.01, 0.05],
-            "regressor__regressor__max_samples": [None, 0.5, 0.8],
-            "regressor__regressor__ccp_alpha": [0.0, 0.001, 0.01]
+            "regressor__regressor__criterion": ["squared_error", "absolute_error"],
+            "regressor__regressor__max_leaf_nodes": [None, 20],
+            "regressor__regressor__max_samples": [None, 0.8],
+            "regressor__regressor__ccp_alpha": [0.0, 0.001]
         }
         grid_search = GridSearchCV(estimator=pipeline, param_grid=param_grid,
                                    cv=gkf.split(X_train, y_train, groups_train),
