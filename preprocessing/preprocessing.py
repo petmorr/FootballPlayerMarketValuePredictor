@@ -1,5 +1,4 @@
 import os
-import re
 from multiprocessing import Pool
 from pathlib import Path
 
@@ -303,17 +302,18 @@ def aggregate_duplicate_players(df: pd.DataFrame, weight_col: str = "minutes_pla
     """
     Aggregate duplicate player records (grouped by 'player' and 'season' if available).
 
-    - For numeric columns (except the weight column), compute a weighted average using
-      the weight column; the weight column itself is summed.
+    - Numeric columns (except the weight column) are aggregated as a weighted average using the
+      weight column. The weight column itself is summed.
     - For categorical columns:
-         * For "position", split each record on commas and slashes, trim spaces,
-           get unique tokens, and re-join them (e.g. "FW,MF" and "MF" become "FW, MF").
-         * For "squad", all unique non-null values are concatenated (sorted, separated by "/").
-         * For all others, use the mode if available; otherwise, the first value.
-    - The "rank" column is skipped entirely.
-    - Finally, the aggregated DataFrame is sorted (by player name) and a new "rank"
-      column is assigned sequentially.
+         * For "position": each value is split on commas and slashes, trimmed, deduplicated,
+           and rejoined with ", " (e.g. "FW,MF" and "MF" become "FW, MF").
+         * For other columns, if more than one unique value is present, they are joined with a "/" separator;
+           if only one unique value is present, that value is used.
+    - The "rank" column (if present) is ignored.
+    - After grouping (by "player" and, if available, "season"), a new sequential "rank" column is
+      assigned as the first column.
     """
+    import re
     import numpy as np
     import pandas as pd
 
@@ -324,7 +324,7 @@ def aggregate_duplicate_players(df: pd.DataFrame, weight_col: str = "minutes_pla
 
     def agg_func(group: pd.DataFrame) -> pd.Series:
         result = {}
-        # If the weight column exists, use it; otherwise, use equal weights.
+        # Prepare weights: use weight_col if it exists; otherwise, use equal weights.
         if weight_col in group.columns:
             try:
                 weights = group[weight_col].astype(float)
@@ -334,7 +334,7 @@ def aggregate_duplicate_players(df: pd.DataFrame, weight_col: str = "minutes_pla
             weights = pd.Series(np.ones(len(group)), index=group.index)
 
         for col in group.columns:
-            # Skip grouping columns and the rank column
+            # Skip grouping columns and "rank"
             if col in group_cols or col == "rank":
                 continue
             elif pd.api.types.is_numeric_dtype(group[col]):
@@ -347,27 +347,27 @@ def aggregate_duplicate_players(df: pd.DataFrame, weight_col: str = "minutes_pla
                     else:
                         result[col] = group[col].mean()
             else:
-                if col == "position":
-                    # For position, split values by comma and slash, trim, and take unique tokens.
+                if col.lower() == "position":
                     tokens = []
                     for val in group[col].dropna().astype(str):
-                        # Split on comma or slash
                         parts = re.split(r"[,/]", val)
                         tokens.extend([p.strip() for p in parts if p.strip()])
                     unique_tokens = sorted(set(tokens))
                     result[col] = ", ".join(unique_tokens)
-                elif col == "squad":
-                    unique_vals = group[col].dropna().unique()
-                    result[col] = "/".join(sorted(map(str, unique_vals)))
                 else:
-                    mode_val = group[col].mode()
-                    result[col] = mode_val.iloc[0] if not mode_val.empty else group[col].iloc[0]
+                    unique_vals = group[col].dropna().unique()
+                    if len(unique_vals) == 0:
+                        result[col] = None
+                    elif len(unique_vals) == 1:
+                        result[col] = unique_vals[0]
+                    else:
+                        result[col] = "/".join(sorted(map(str, unique_vals)))
         return pd.Series(result)
 
     aggregated_df = df.groupby(group_cols, as_index=False).apply(agg_func).reset_index(drop=True)
-    # Reorder the aggregated records (here by player name) and assign a new rank.
+    # Sort by "player" to impose a consistent order and then reassign a new "rank"
     aggregated_df = aggregated_df.sort_values(by="player").reset_index(drop=True)
-    aggregated_df["rank"] = aggregated_df.index + 1
+    aggregated_df.insert(0, "rank", aggregated_df.index + 1)
     logger.info(
         f"Aggregated duplicate players: {aggregated_df.shape[0]} unique records based on {group_cols}, new rank assigned.")
     return aggregated_df
