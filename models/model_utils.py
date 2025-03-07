@@ -4,9 +4,11 @@ Common utilities for model training and prediction.
 
 import glob
 import os
+import time
 from pathlib import Path
-from typing import Tuple
+from typing import Tuple, Optional, Union, List, Dict, Any
 
+import joblib
 import numpy as np
 import pandas as pd
 from sklearn.compose import ColumnTransformer
@@ -22,18 +24,7 @@ logger = configure_logger("model_utils", "model_utils.log")
 
 
 def load_updated_data(data_dir: str) -> pd.DataFrame:
-    """
-    Load and concatenate all Parquet files from the specified folder.
-
-    Args:
-        data_dir (str): Directory containing updated data files.
-
-    Returns:
-        pd.DataFrame: Combined DataFrame of updated data.
-
-    Raises:
-        FileNotFoundError: If no matching files are found.
-    """
+    """Load and concatenate all Parquet files from the specified folder."""
     file_pattern = os.path.join(data_dir, "updated_*.parquet")
     files = glob.glob(file_pattern)
     if not files:
@@ -46,45 +37,24 @@ def load_updated_data(data_dir: str) -> pd.DataFrame:
 
 
 def compute_sample_weights(y: pd.Series, factor: float = 1.5) -> np.array:
-    """
-    Compute sample weights inversely proportional to the deviation from the median.
-
-    Outliers receive lower weight.
-
-    Args:
-        y (pd.Series): Target variable.
-        factor (float, optional): Scaling factor. Defaults to 1.5.
-
-    Returns:
-        np.array: Computed sample weights.
-    """
+    """Compute sample weights inversely proportional to the deviation from the median."""
     median = np.median(y)
     mad = np.median(np.abs(y - median))
     weights = 1 / (1 + np.abs(y - median) / (mad * factor + 1e-6))
     return weights
 
 
-def select_features_and_target(df: pd.DataFrame, drop_cols: set = None) -> Tuple[pd.DataFrame, pd.Series]:
+def select_features_and_target(df: pd.DataFrame, drop_cols: Optional[set] = None) -> Tuple[pd.DataFrame, pd.Series]:
     """
     Select predictor features and the target variable ('Market Value').
 
-    Args:
-        df (pd.DataFrame): Input DataFrame.
-        drop_cols (set, optional): Columns to drop from the feature set.
-                                   Defaults to {"league", "season", "born", "country_code", "squad"}.
-
-    Returns:
-        Tuple[pd.DataFrame, pd.Series]: Feature set X and target variable y.
-
-    Raises:
-        ValueError: If 'Market Value' column is missing.
+    Keeps the 'player' column for grouping.
     """
     if drop_cols is None:
         drop_cols = {"league", "season", "born", "country_code", "squad"}
     if "Market Value" not in df.columns:
         logger.error("The data does not contain a 'Market Value' column.")
         raise ValueError("The data does not contain a 'Market Value' column.")
-    # Keep "player" column for grouping.
     X = df.drop(columns=drop_cols.union({"Market Value"}), errors="ignore")
     y = df["Market Value"]
     mask = y.notnull()
@@ -94,15 +64,7 @@ def select_features_and_target(df: pd.DataFrame, drop_cols: set = None) -> Tuple
 
 
 def build_preprocessor(X: pd.DataFrame) -> ColumnTransformer:
-    """
-    Build a ColumnTransformer for preprocessing numeric and categorical features.
-
-    Args:
-        X (pd.DataFrame): Input feature DataFrame.
-
-    Returns:
-        ColumnTransformer: Preprocessing transformer.
-    """
+    """Build a ColumnTransformer for preprocessing numeric and categorical features."""
     numeric_features = X.select_dtypes(include=["int64", "float64"]).columns.tolist()
     if "player" in numeric_features:
         numeric_features.remove("player")
@@ -129,16 +91,7 @@ def split_data(X: pd.DataFrame, y: pd.Series, groups: pd.Series, random_state: i
                ) -> Tuple[
     pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, pd.Series, pd.Series, pd.Series]:
     """
-    Split the data into training (60%), validation (20%), and test (20%) sets.
-
-    Args:
-        X (pd.DataFrame): Feature set.
-        y (pd.Series): Target variable.
-        groups (pd.Series): Grouping variable (e.g., 'player').
-        random_state (int, optional): Random seed. Defaults to 42.
-
-    Returns:
-        Tuple: X_train, X_val, X_test, y_train, y_val, y_test, groups_train, groups_test.
+    Split data into training (60%), validation (20%), and test (20%) sets using group-aware splitting.
     """
     from sklearn.model_selection import GroupShuffleSplit
     gss = GroupShuffleSplit(test_size=0.2, random_state=random_state)
@@ -158,18 +111,7 @@ def split_data(X: pd.DataFrame, y: pd.Series, groups: pd.Series, random_state: i
 
 def evaluate_model(model, X: pd.DataFrame, y: pd.Series, dataset_name: str = "Dataset"
                    ) -> Tuple[float, float, float, float, float]:
-    """
-    Evaluate the model using various regression metrics.
-
-    Args:
-        model: Trained model.
-        X (pd.DataFrame): Feature set.
-        y (pd.Series): Target variable.
-        dataset_name (str, optional): Label for the dataset. Defaults to "Dataset".
-
-    Returns:
-        Tuple[float, float, float, float, float]: RMSE, R², MAE, MedAE, MAPE.
-    """
+    """Evaluate the model using various regression metrics."""
     predictions = model.predict(X)
     rmse = np.sqrt(mean_squared_error(y, predictions))
     r2 = r2_score(y, predictions)
@@ -181,15 +123,9 @@ def evaluate_model(model, X: pd.DataFrame, y: pd.Series, dataset_name: str = "Da
     return rmse, r2, mae, medae, mape
 
 
-def predict_on_file(model, file_path: str, drop_cols: set, predictions_dir: str) -> None:
+def predict_on_file(model, file_path: str, drop_cols: set, predictions_dir: Union[str, Path]) -> None:
     """
     Generate predictions for a single file and save the results.
-
-    Args:
-        model: Trained model.
-        file_path (str): Path to the input Parquet file.
-        drop_cols (set): Columns to drop from the input data.
-        predictions_dir (str): Directory where predictions will be saved.
     """
     logger.info(f"Processing file: {file_path}")
     df = pd.read_parquet(file_path)
@@ -202,3 +138,126 @@ def predict_on_file(model, file_path: str, drop_cols: set, predictions_dir: str)
     output_file = Path(predictions_dir) / f"predicted_{base_name}"
     df_pred.to_parquet(output_file, index=False)
     logger.info(f"Saved predictions to: {output_file}")
+
+
+def run_training_pipeline(model_name: str,
+                          pipeline_builder,
+                          search_class,
+                          param_grid: Union[Dict[str, List[Any]], List[Dict[str, Any]]],
+                          use_sample_weight: bool,
+                          model_filename: str,
+                          predictions_subdir: str,
+                          metrics_filename: str,
+                          search_kwargs: Optional[Dict[str, Any]] = None) -> None:
+    """
+    Run the training and prediction pipeline for a given model.
+
+    Parameters:
+      - model_name: e.g. "Random Forest" or "Linear Regression"
+      - pipeline_builder: Callable that accepts X_train and returns a Pipeline.
+      - search_class: Hyperparameter search class (GridSearchCV or HalvingGridSearchCV).
+      - param_grid: Hyperparameter grid.
+      - use_sample_weight: Whether to compute sample weights.
+      - model_filename: Filename prefix for saving the model.
+      - predictions_subdir: Subdirectory (under ../data/predictions) for predictions.
+      - metrics_filename: CSV filename for performance metrics.
+      - search_kwargs: Additional kwargs for the search class.
+    """
+    performance_records = []
+    drop_cols = {"league", "season", "born", "country_code", "squad", "rank", "position"}
+
+    # Define preprocessed variants.
+    PREPROC_VARIANTS = {
+        "enhanced_feature_engineering": "../data/updated/enhanced_feature_engineering",
+        "feature_engineering": "../data/updated/feature_engineering",
+        "no_feature_engineering": "../data/updated/no_feature_engineering"
+    }
+
+    for variant_name, variant_folder in PREPROC_VARIANTS.items():
+        logger.info(f"Processing variant: {variant_name} from folder: {variant_folder}")
+        df = load_updated_data(variant_folder)
+        X_all, y_all = select_features_and_target(df, drop_cols=drop_cols)
+        groups_all = X_all["player"]
+        X_all = X_all.drop(columns=["player"], errors="ignore")
+        X_train, X_val, X_test, y_train, y_val, y_test, groups_train, _ = split_data(
+            X_all, y_all, groups_all, random_state=42
+        )
+        fit_params = {}
+        if use_sample_weight:
+            sample_weights = compute_sample_weights(y_train)
+            fit_params = {"regressor__sample_weight": sample_weights}
+
+        pipeline = pipeline_builder(X_train)
+        from sklearn.model_selection import GroupKFold
+        cv = GroupKFold(n_splits=5)
+        if search_kwargs is None:
+            search_kwargs = {}
+        search_obj = search_class(
+            estimator=pipeline,
+            param_grid=param_grid,
+            cv=cv,
+            scoring="neg_mean_squared_error",
+            n_jobs=-1,
+            verbose=1,
+            **search_kwargs
+        )
+        logger.info(f"Starting hyperparameter search for {model_name} on variant: {variant_name}")
+        start = time.time()
+        search_obj.fit(X_train, y_train, groups=groups_train, **fit_params)
+        elapsed = time.time() - start
+        logger.info(f"Hyperparameter search for variant {variant_name} completed in {elapsed:.2f} seconds.")
+        logger.info(f"Best hyperparameters for variant {variant_name}: {search_obj.best_params_}")
+        best_model = search_obj.best_estimator_
+
+        val_metrics = evaluate_model(best_model, X_val, y_val,
+                                     dataset_name=f"Validation ({variant_name} - {model_name})")
+        test_metrics = evaluate_model(best_model, X_test, y_test, dataset_name=f"Test ({variant_name} - {model_name})")
+        performance_records.extend([
+            {
+                "variant": variant_name,
+                "dataset": "Validation",
+                "model": model_name,
+                "rmse": val_metrics[0],
+                "r2": val_metrics[1],
+                "mae": val_metrics[2],
+                "medae": val_metrics[3],
+                "mape": val_metrics[4],
+                "training_time": elapsed,
+                "best_params": str(search_obj.best_params_)
+            },
+            {
+                "variant": variant_name,
+                "dataset": "Test",
+                "model": model_name,
+                "rmse": test_metrics[0],
+                "r2": test_metrics[1],
+                "mae": test_metrics[2],
+                "medae": test_metrics[3],
+                "mape": test_metrics[4],
+                "training_time": elapsed,
+                "best_params": str(search_obj.best_params_)
+            }
+        ])
+        model_path = Path(__file__).parent / "results" / f"{model_filename}_{variant_name}.pkl"
+        joblib.dump(best_model, model_path)
+        logger.info(f"{model_name} model for variant {variant_name} saved to {model_path}")
+
+        pred_drop_cols = drop_cols.union({"Market Value"})
+        predictions_dir = Path("../data/predictions") / predictions_subdir / variant_name
+        predictions_dir.mkdir(parents=True, exist_ok=True)
+        file_pattern = os.path.join(variant_folder, "updated_*.parquet")
+        files = glob.glob(file_pattern)
+        if not files:
+            logger.error(f"No files found in {variant_folder}")
+        else:
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+            with ThreadPoolExecutor(max_workers=10) as executor:
+                futures = [executor.submit(predict_on_file, best_model, file_path, pred_drop_cols, predictions_dir)
+                           for file_path in files]
+                for future in as_completed(futures):
+                    future.result()
+            logger.info(f"Prediction process completed for variant {variant_name}.")
+
+    csv_path = Path(__file__).parent / "results" / metrics_filename
+    pd.DataFrame(performance_records).to_csv(csv_path, index=False)
+    logger.info(f"Performance metrics saved to {csv_path}")
