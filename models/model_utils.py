@@ -8,7 +8,6 @@ import time
 from pathlib import Path
 from typing import Tuple, Optional, Union, List, Dict, Any
 
-import joblib
 import numpy as np
 import pandas as pd
 from sklearn.compose import ColumnTransformer
@@ -140,6 +139,164 @@ def predict_on_file(model, file_path: str, drop_cols: set, predictions_dir: Unio
     logger.info(f"Saved predictions to: {output_file}")
 
 
+# --- XGBoost GPU Support ---
+try:
+    import cupy as cp
+except ImportError:
+    cp = None
+
+from xgboost import XGBRegressor, DMatrix
+
+
+class XGBRegressorGPU:
+    """
+    A wrapper for XGBRegressor that ensures input data is converted to a GPU array.
+    This class is defined at module level so that it is picklable.
+    """
+
+    def __init__(self, **kwargs):
+        self._model = XGBRegressor(**kwargs)
+
+    def fit(self, X, y, **kwargs):
+        return self._model.fit(X, y, **kwargs)
+
+    def predict(self, X, **kwargs):
+        X_np = np.asarray(X)
+        if cp is not None:
+            X_gpu = cp.asarray(X_np)
+        else:
+            X_gpu = X_np
+        dmat = DMatrix(X_gpu)
+        y_pred = self._model.get_booster().predict(dmat, **kwargs)
+        return y_pred
+
+    def get_params(self, deep=True):
+        return self._model.get_params(deep=deep)
+
+    def set_params(self, **params):
+        self._model.set_params(**params)
+        return self
+
+    def get_booster(self):
+        return self._model.get_booster()
+
+
+# --- End XGBoost GPU Support ---
+
+
+def process_variant(variant_name: str,
+                    variant_folder: str,
+                    model_name: str,
+                    pipeline_builder,
+                    search_class,
+                    param_grid: Union[Dict[str, List[Any]], List[Dict[str, Any]]],
+                    use_sample_weight: bool,
+                    model_filename: str,
+                    predictions_subdir: str,
+                    search_kwargs: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    """
+    Process a single feature-engineering variant.
+
+    This function loads data, builds the pipeline, performs hyperparameter search, evaluates the model,
+    saves predictions, and returns performance records for the variant.
+    """
+    import joblib
+    drop_cols = {"league", "season", "born", "country_code", "squad", "rank", "position"}
+    logger.info(f"Processing variant: {variant_name} from folder: {variant_folder}")
+    df = load_updated_data(variant_folder)
+    X_all, y_all = select_features_and_target(df, drop_cols=drop_cols)
+    groups_all = X_all["player"]
+    X_all = X_all.drop(columns=["player"], errors="ignore")
+    X_train, X_val, X_test, y_train, y_val, y_test, groups_train, _ = split_data(
+        X_all, y_all, groups_all, random_state=42
+    )
+    fit_params = {}
+    if use_sample_weight:
+        sample_weights = compute_sample_weights(y_train)
+        fit_params = {"regressor__sample_weight": sample_weights}
+    pipeline = pipeline_builder(X_train)
+    from sklearn.model_selection import GroupKFold
+    cv = GroupKFold(n_splits=5)
+    if search_kwargs is None:
+        search_kwargs = {}
+    if search_class.__name__ == "RandomizedSearchCV":
+        search_obj = search_class(
+            estimator=pipeline,
+            param_distributions=param_grid,
+            cv=cv,
+            scoring="neg_mean_squared_error",
+            n_jobs=-1,
+            verbose=1,
+            **search_kwargs
+        )
+    else:
+        search_obj = search_class(
+            estimator=pipeline,
+            param_grid=param_grid,
+            cv=cv,
+            scoring="neg_mean_squared_error",
+            n_jobs=-1,
+            verbose=1,
+            **search_kwargs
+        )
+    logger.info(f"Starting hyperparameter search for {model_name} on variant: {variant_name}")
+    start = time.time()
+    search_obj.fit(X_train, y_train, groups=groups_train, **fit_params)
+    elapsed = time.time() - start
+    logger.info(f"Hyperparameter search for variant {variant_name} completed in {elapsed:.2f} seconds.")
+    logger.info(f"Best hyperparameters for variant {variant_name}: {search_obj.best_params_}")
+    best_model = search_obj.best_estimator_
+    val_metrics = evaluate_model(best_model, X_val, y_val,
+                                 dataset_name=f"Validation ({variant_name} - {model_name})")
+    test_metrics = evaluate_model(best_model, X_test, y_test,
+                                  dataset_name=f"Test ({variant_name} - {model_name})")
+    performance = [
+        {
+            "variant": variant_name,
+            "dataset": "Validation",
+            "model": model_name,
+            "rmse": val_metrics[0],
+            "r2": val_metrics[1],
+            "mae": val_metrics[2],
+            "medae": val_metrics[3],
+            "mape": val_metrics[4],
+            "training_time": elapsed,
+            "best_params": str(search_obj.best_params_)
+        },
+        {
+            "variant": variant_name,
+            "dataset": "Test",
+            "model": model_name,
+            "rmse": test_metrics[0],
+            "r2": test_metrics[1],
+            "mae": test_metrics[2],
+            "medae": test_metrics[3],
+            "mape": test_metrics[4],
+            "training_time": elapsed,
+            "best_params": str(search_obj.best_params_)
+        }
+    ]
+    model_path = Path(__file__).parent / "results" / f"{model_filename}_{variant_name}.pkl"
+    joblib.dump(best_model, model_path)
+    logger.info(f"{model_name} model for variant {variant_name} saved to {model_path}")
+    pred_drop_cols = drop_cols.union({"Market Value"})
+    predictions_dir = Path("../data/predictions") / predictions_subdir / variant_name
+    predictions_dir.mkdir(parents=True, exist_ok=True)
+    file_pattern = os.path.join(variant_folder, "updated_*.parquet")
+    files = glob.glob(file_pattern)
+    if not files:
+        logger.error(f"No files found in {variant_folder}")
+    else:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            futures = [executor.submit(predict_on_file, best_model, file_path, pred_drop_cols, predictions_dir)
+                       for file_path in files]
+            for future in as_completed(futures):
+                future.result()
+        logger.info(f"Prediction process completed for variant {variant_name}.")
+    return performance
+
+
 def run_training_pipeline(model_name: str,
                           pipeline_builder,
                           search_class,
@@ -150,12 +307,13 @@ def run_training_pipeline(model_name: str,
                           metrics_filename: str,
                           search_kwargs: Optional[Dict[str, Any]] = None) -> None:
     """
-    Run the training and prediction pipeline for a given model.
+    Run the training and prediction pipeline for a given model across all preprocessed variants.
+    Each variant is processed in a separate process.
 
     Parameters:
-      - model_name: e.g. "Random Forest" or "Linear Regression"
+      - model_name: e.g. "Random Forest", "Linear Regression", "XGBoost"
       - pipeline_builder: Callable that accepts X_train and returns a Pipeline.
-      - search_class: Hyperparameter search class (GridSearchCV, HalvingGridSearchCV, or RandomizedSearchCV).
+      - search_class: Hyperparameter search class (e.g., GridSearchCV, HalvingGridSearchCV, or RandomizedSearchCV).
       - param_grid: Hyperparameter grid.
       - use_sample_weight: Whether to compute sample weights.
       - model_filename: Filename prefix for saving the model.
@@ -163,114 +321,34 @@ def run_training_pipeline(model_name: str,
       - metrics_filename: CSV filename for performance metrics.
       - search_kwargs: Additional kwargs for the search class.
     """
-    performance_records = []
-    drop_cols = {"league", "season", "born", "country_code", "squad", "rank", "position"}
+    import multiprocessing
+    from concurrent.futures import ProcessPoolExecutor, as_completed
 
-    # Define preprocessed variants.
+    all_records = []
     PREPROC_VARIANTS = {
         "enhanced_feature_engineering": "../data/updated/enhanced_feature_engineering",
         "feature_engineering": "../data/updated/feature_engineering",
         "no_feature_engineering": "../data/updated/no_feature_engineering"
     }
 
-    for variant_name, variant_folder in PREPROC_VARIANTS.items():
-        logger.info(f"Processing variant: {variant_name} from folder: {variant_folder}")
-        df = load_updated_data(variant_folder)
-        X_all, y_all = select_features_and_target(df, drop_cols=drop_cols)
-        groups_all = X_all["player"]
-        X_all = X_all.drop(columns=["player"], errors="ignore")
-        X_train, X_val, X_test, y_train, y_val, y_test, groups_train, _ = split_data(
-            X_all, y_all, groups_all, random_state=42
-        )
-        fit_params = {}
-        if use_sample_weight:
-            sample_weights = compute_sample_weights(y_train)
-            fit_params = {"regressor__sample_weight": sample_weights}
+    max_workers = min(len(PREPROC_VARIANTS), multiprocessing.cpu_count())
 
-        pipeline = pipeline_builder(X_train)
-        from sklearn.model_selection import GroupKFold
-        cv = GroupKFold(n_splits=5)
-        if search_kwargs is None:
-            search_kwargs = {}
-        # Check if the search class is RandomizedSearchCV; if so, use 'param_distributions'
-        if search_class.__name__ == "RandomizedSearchCV":
-            search_obj = search_class(
-                estimator=pipeline,
-                param_distributions=param_grid,
-                cv=cv,
-                scoring="neg_mean_squared_error",
-                n_jobs=-1,
-                verbose=1,
-                **search_kwargs
-            )
-        else:
-            search_obj = search_class(
-                estimator=pipeline,
-                param_grid=param_grid,
-                cv=cv,
-                scoring="neg_mean_squared_error",
-                n_jobs=-1,
-                verbose=1,
-                **search_kwargs
-            )
-        logger.info(f"Starting hyperparameter search for {model_name} on variant: {variant_name}")
-        start = time.time()
-        search_obj.fit(X_train, y_train, groups=groups_train, **fit_params)
-        elapsed = time.time() - start
-        logger.info(f"Hyperparameter search for variant {variant_name} completed in {elapsed:.2f} seconds.")
-        logger.info(f"Best hyperparameters for variant {variant_name}: {search_obj.best_params_}")
-        best_model = search_obj.best_estimator_
-
-        val_metrics = evaluate_model(best_model, X_val, y_val,
-                                     dataset_name=f"Validation ({variant_name} - {model_name})")
-        test_metrics = evaluate_model(best_model, X_test, y_test,
-                                      dataset_name=f"Test ({variant_name} - {model_name})")
-        performance_records.extend([
-            {
-                "variant": variant_name,
-                "dataset": "Validation",
-                "model": model_name,
-                "rmse": val_metrics[0],
-                "r2": val_metrics[1],
-                "mae": val_metrics[2],
-                "medae": val_metrics[3],
-                "mape": val_metrics[4],
-                "training_time": elapsed,
-                "best_params": str(search_obj.best_params_)
-            },
-            {
-                "variant": variant_name,
-                "dataset": "Test",
-                "model": model_name,
-                "rmse": test_metrics[0],
-                "r2": test_metrics[1],
-                "mae": test_metrics[2],
-                "medae": test_metrics[3],
-                "mape": test_metrics[4],
-                "training_time": elapsed,
-                "best_params": str(search_obj.best_params_)
-            }
-        ])
-        model_path = Path(__file__).parent / "results" / f"{model_filename}_{variant_name}.pkl"
-        joblib.dump(best_model, model_path)
-        logger.info(f"{model_name} model for variant {variant_name} saved to {model_path}")
-
-        pred_drop_cols = drop_cols.union({"Market Value"})
-        predictions_dir = Path("../data/predictions") / predictions_subdir / variant_name
-        predictions_dir.mkdir(parents=True, exist_ok=True)
-        file_pattern = os.path.join(variant_folder, "updated_*.parquet")
-        files = glob.glob(file_pattern)
-        if not files:
-            logger.error(f"No files found in {variant_folder}")
-        else:
-            from concurrent.futures import ThreadPoolExecutor, as_completed
-            with ThreadPoolExecutor(max_workers=10) as executor:
-                futures = [executor.submit(predict_on_file, best_model, file_path, pred_drop_cols, predictions_dir)
-                           for file_path in files]
-                for future in as_completed(futures):
-                    future.result()
-            logger.info(f"Prediction process completed for variant {variant_name}.")
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        future_to_variant = {executor.submit(process_variant, vn, vf, model_name,
+                                             pipeline_builder, search_class, param_grid,
+                                             use_sample_weight, model_filename,
+                                             predictions_subdir, search_kwargs): vn
+                             for vn, vf in PREPROC_VARIANTS.items()}
+        for future in as_completed(future_to_variant):
+            vn = future_to_variant[future]
+            try:
+                result = future.result()
+                if result:
+                    all_records.extend(result)
+            except Exception as exc:
+                logger.error(f"Variant {vn} generated an exception: {exc}", exc_info=True)
 
     csv_path = Path(__file__).parent / "results" / metrics_filename
-    pd.DataFrame(performance_records).to_csv(csv_path, index=False)
+    import pandas as pd
+    pd.DataFrame(all_records).to_csv(csv_path, index=False)
     logger.info(f"Performance metrics saved to {csv_path}")

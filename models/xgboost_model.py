@@ -11,32 +11,13 @@ import numpy as np
 from sklearn.compose import TransformedTargetRegressor
 from sklearn.model_selection import RandomizedSearchCV
 from sklearn.pipeline import Pipeline
-from xgboost import XGBRegressor, DMatrix
 
-from model_utils import run_training_pipeline, build_preprocessor
+from model_utils import run_training_pipeline, build_preprocessor, XGBRegressorGPU
 
-# Try to import cupy for GPU array conversion.
 try:
     import cupy as cp
 except ImportError:
     cp = None
-
-
-# Subclass XGBRegressor to override predict so that it always creates a GPU DMatrix.
-class XGBRegressorGPU(XGBRegressor):
-    def predict(self, X, **kwargs):
-        # Convert input to numpy array.
-        X_np = np.asarray(X)
-        # Convert to cupy array if available.
-        if cp is not None:
-            X_gpu = cp.asarray(X_np)
-        else:
-            X_gpu = X_np
-        # Create a DMatrix from GPU data.
-        dmat = DMatrix(X_gpu)
-        # Call the booster’s predict method.
-        return self.get_booster().predict(dmat, **kwargs)
-
 
 def xgb_pipeline_builder(X_train) -> Pipeline:
     """
@@ -50,8 +31,8 @@ def xgb_pipeline_builder(X_train) -> Pipeline:
     preprocessor = build_preprocessor(X_train)
     xgb_gpu = XGBRegressorGPU(
         random_state=42,
-        tree_method='hist',  # Use the recommended histogram method.
-        device='cuda',  # Enable GPU training.
+        tree_method='hist',
+        device='cuda',
         verbosity=1,
         n_jobs=-1
     )
@@ -62,8 +43,6 @@ def xgb_pipeline_builder(X_train) -> Pipeline:
     )
     return Pipeline(steps=[("preprocessor", preprocessor), ("regressor", regressor)])
 
-
-# Expanded comprehensive hyperparameter grid for XGBoost.
 xgb_param_grid = {
     "regressor__regressor__n_estimators": [100, 200, 300, 500],
     "regressor__regressor__max_depth": [3, 5, 7, 10, 15],
