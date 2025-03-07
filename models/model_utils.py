@@ -155,7 +155,7 @@ def run_training_pipeline(model_name: str,
     Parameters:
       - model_name: e.g. "Random Forest" or "Linear Regression"
       - pipeline_builder: Callable that accepts X_train and returns a Pipeline.
-      - search_class: Hyperparameter search class (GridSearchCV or HalvingGridSearchCV).
+      - search_class: Hyperparameter search class (GridSearchCV, HalvingGridSearchCV, or RandomizedSearchCV).
       - param_grid: Hyperparameter grid.
       - use_sample_weight: Whether to compute sample weights.
       - model_filename: Filename prefix for saving the model.
@@ -192,15 +192,27 @@ def run_training_pipeline(model_name: str,
         cv = GroupKFold(n_splits=5)
         if search_kwargs is None:
             search_kwargs = {}
-        search_obj = search_class(
-            estimator=pipeline,
-            param_grid=param_grid,
-            cv=cv,
-            scoring="neg_mean_squared_error",
-            n_jobs=-1,
-            verbose=1,
-            **search_kwargs
-        )
+        # Check if the search class is RandomizedSearchCV; if so, use 'param_distributions'
+        if search_class.__name__ == "RandomizedSearchCV":
+            search_obj = search_class(
+                estimator=pipeline,
+                param_distributions=param_grid,
+                cv=cv,
+                scoring="neg_mean_squared_error",
+                n_jobs=-1,
+                verbose=1,
+                **search_kwargs
+            )
+        else:
+            search_obj = search_class(
+                estimator=pipeline,
+                param_grid=param_grid,
+                cv=cv,
+                scoring="neg_mean_squared_error",
+                n_jobs=-1,
+                verbose=1,
+                **search_kwargs
+            )
         logger.info(f"Starting hyperparameter search for {model_name} on variant: {variant_name}")
         start = time.time()
         search_obj.fit(X_train, y_train, groups=groups_train, **fit_params)
@@ -211,7 +223,8 @@ def run_training_pipeline(model_name: str,
 
         val_metrics = evaluate_model(best_model, X_val, y_val,
                                      dataset_name=f"Validation ({variant_name} - {model_name})")
-        test_metrics = evaluate_model(best_model, X_test, y_test, dataset_name=f"Test ({variant_name} - {model_name})")
+        test_metrics = evaluate_model(best_model, X_test, y_test,
+                                      dataset_name=f"Test ({variant_name} - {model_name})")
         performance_records.extend([
             {
                 "variant": variant_name,
