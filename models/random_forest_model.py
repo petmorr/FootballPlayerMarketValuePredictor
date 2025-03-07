@@ -26,27 +26,17 @@ def rf_pipeline_builder(X_train) -> Pipeline:
 rf_param_grid = [
     {
         "regressor__regressor__bootstrap": [True],
-        "regressor__regressor__max_samples": [None, 0.5, 0.8],
-        "regressor__regressor__n_estimators": [50, 100, 200, 300, 500],
-        "regressor__regressor__max_depth": [None, 10, 20, 30],
-        "regressor__regressor__max_features": [None, "sqrt", "log2", 0.5],
-        "regressor__regressor__criterion": ["squared_error", "absolute_error", "friedman_mse"],
-        "regressor__regressor__min_samples_split": [2, 5, 10],
-        "regressor__regressor__min_samples_leaf": [1, 2, 4],
-        "regressor__regressor__max_leaf_nodes": [None, 20, 50],
-        "regressor__regressor__ccp_alpha": [0.0, 0.001, 0.01],
+        "regressor__regressor__max_samples": [None, 0.8],
+        "regressor__regressor__n_estimators": [100, 300],
+        "regressor__regressor__max_depth": [None, 10],
+        "regressor__regressor__max_features": [None, "sqrt"]
     },
     {
         "regressor__regressor__bootstrap": [False],
-        "regressor__regressor__max_samples": [None],  # Must be None when bootstrap is False.
-        "regressor__regressor__n_estimators": [50, 100, 200, 300, 500],
-        "regressor__regressor__max_depth": [None, 10, 20, 30],
-        "regressor__regressor__max_features": [None, "sqrt", "log2", 0.5],
-        "regressor__regressor__criterion": ["squared_error", "absolute_error", "friedman_mse"],
-        "regressor__regressor__min_samples_split": [2, 5, 10],
-        "regressor__regressor__min_samples_leaf": [1, 2, 4],
-        "regressor__regressor__max_leaf_nodes": [None, 20, 50],
-        "regressor__regressor__ccp_alpha": [0.0, 0.001, 0.01],
+        "regressor__regressor__max_samples": [None],
+        "regressor__regressor__n_estimators": [100, 300],
+        "regressor__regressor__max_depth": [None, 10],
+        "regressor__regressor__max_features": [None, "sqrt"]
     }
 ]
 
