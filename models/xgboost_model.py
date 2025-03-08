@@ -1,7 +1,7 @@
 """
 Full Pipeline for Training and Predicting Player Transfer Prices using XGBoost.
 
-This script uses XGBoost's XGBRegressor (subclassed as XGBRegressorGPU) with an expanded comprehensive
+This script uses XGBoost's XGBRegressorGPU (imported from model_utils) with an expanded comprehensive
 hyperparameter grid and RandomizedSearchCV to train and evaluate the model on three preprocessed variants.
 GPU acceleration is enabled by setting tree_method='hist' and device='cuda'.
 Performance metrics are saved to a CSV.
@@ -14,17 +14,13 @@ from sklearn.pipeline import Pipeline
 
 from model_utils import run_training_pipeline, build_preprocessor, XGBRegressorGPU
 
-try:
-    import cupy as cp
-except ImportError:
-    cp = None
 
 def xgb_pipeline_builder(X_train) -> Pipeline:
     """
     Build the pipeline for XGBoost.
 
-    Uses the common preprocessor and wraps our XGBRegressorGPU in a TransformedTargetRegressor
-    to apply a log1p transform to the target variable.
+    Uses the common preprocessor and wraps our XGBRegressorGPU (defined in model_utils)
+    in a TransformedTargetRegressor to apply a log1p transform to the target variable.
 
     GPU acceleration is enabled by setting tree_method='hist' and device='cuda'.
     """
@@ -43,6 +39,8 @@ def xgb_pipeline_builder(X_train) -> Pipeline:
     )
     return Pipeline(steps=[("preprocessor", preprocessor), ("regressor", regressor)])
 
+
+# Expanded comprehensive hyperparameter grid for XGBoost.
 xgb_param_grid = {
     "regressor__regressor__n_estimators": [100, 200, 300, 500],
     "regressor__regressor__max_depth": [3, 5, 7, 10, 15],
@@ -56,6 +54,9 @@ xgb_param_grid = {
 }
 
 if __name__ == "__main__":
+    import multiprocessing
+
+    multiprocessing.freeze_support()  # Required on Windows for multiprocessing
     run_training_pipeline(
         model_name="XGBoost",
         pipeline_builder=xgb_pipeline_builder,
