@@ -90,7 +90,7 @@ def split_data(X: pd.DataFrame, y: pd.Series, groups: pd.Series, random_state: i
                ) -> Tuple[
     pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, pd.Series, pd.Series, pd.Series]:
     """
-    Split data into training (60%), validation (20%), and test (20%) sets using group-aware splitting.
+    Split data into training (60%), validation (20%), and test (20%) sets using group‑aware splitting.
     """
     from sklearn.model_selection import GroupShuffleSplit
     gss = GroupShuffleSplit(test_size=0.2, random_state=random_state)
@@ -147,13 +147,11 @@ except ImportError:
 
 from xgboost import XGBRegressor, DMatrix
 
-
 class XGBRegressorGPU:
     """
     A wrapper for XGBRegressor that ensures input data is converted to a GPU array.
     This class is defined at module level so that it is picklable.
     """
-
     def __init__(self, **kwargs):
         self._model = XGBRegressor(**kwargs)
 
@@ -161,13 +159,18 @@ class XGBRegressorGPU:
         return self._model.fit(X, y, **kwargs)
 
     def predict(self, X, **kwargs):
+        # Convert input data to a NumPy array.
         X_np = np.asarray(X)
+        # Convert to cupy array if available (GPU) otherwise leave on CPU.
         if cp is not None:
             X_gpu = cp.asarray(X_np)
         else:
             X_gpu = X_np
+        # Create a DMatrix from the input data.
         dmat = DMatrix(X_gpu)
-        y_pred = self._model.get_booster().predict(dmat, **kwargs)
+        booster = self._model.get_booster()
+        # We now force prediction on CPU by not setting the predictor (to avoid warnings)
+        y_pred = booster.predict(dmat, **kwargs)
         return y_pred
 
     def get_params(self, deep=True):
@@ -179,8 +182,6 @@ class XGBRegressorGPU:
 
     def get_booster(self):
         return self._model.get_booster()
-
-
 # --- End XGBoost GPU Support ---
 
 
@@ -195,7 +196,7 @@ def process_variant(variant_name: str,
                     predictions_subdir: str,
                     search_kwargs: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
     """
-    Process a single feature-engineering variant.
+    Process a single feature‑engineering variant.
 
     This function loads data, builds the pipeline, performs hyperparameter search, evaluates the model,
     saves predictions, and returns performance records for the variant.
@@ -219,13 +220,13 @@ def process_variant(variant_name: str,
     cv = GroupKFold(n_splits=5)
     if search_kwargs is None:
         search_kwargs = {}
+    # If using RandomizedSearchCV, pass param_distributions instead of param_grid
     if search_class.__name__ == "RandomizedSearchCV":
         search_obj = search_class(
             estimator=pipeline,
             param_distributions=param_grid,
             cv=cv,
             scoring="neg_mean_squared_error",
-            n_jobs=-1,
             verbose=1,
             **search_kwargs
         )
@@ -235,7 +236,6 @@ def process_variant(variant_name: str,
             param_grid=param_grid,
             cv=cv,
             scoring="neg_mean_squared_error",
-            n_jobs=-1,
             verbose=1,
             **search_kwargs
         )
@@ -294,6 +294,15 @@ def process_variant(variant_name: str,
             for future in as_completed(futures):
                 future.result()
         logger.info(f"Prediction process completed for variant {variant_name}.")
+    # --- GPU Memory Cleanup ---
+    try:
+        # If cupy is available, free all blocks from the default memory pool.
+        if cp is not None:
+            cp.get_default_memory_pool().free_all_blocks()
+            logger.info("GPU memory freed for variant " + variant_name)
+    except Exception as e:
+        logger.error("Error during GPU memory cleanup: " + str(e))
+    # --- End GPU Memory Cleanup ---
     return performance
 
 
@@ -308,7 +317,7 @@ def run_training_pipeline(model_name: str,
                           search_kwargs: Optional[Dict[str, Any]] = None) -> None:
     """
     Run the training and prediction pipeline for a given model across all preprocessed variants.
-    Each variant is processed in a separate process.
+    This version processes each variant sequentially to avoid pickling issues.
 
     Parameters:
       - model_name: e.g. "Random Forest", "Linear Regression", "XGBoost"
@@ -321,9 +330,6 @@ def run_training_pipeline(model_name: str,
       - metrics_filename: CSV filename for performance metrics.
       - search_kwargs: Additional kwargs for the search class.
     """
-    import multiprocessing
-    from concurrent.futures import ProcessPoolExecutor, as_completed
-
     all_records = []
     PREPROC_VARIANTS = {
         "enhanced_feature_engineering": "../data/updated/enhanced_feature_engineering",
@@ -331,22 +337,15 @@ def run_training_pipeline(model_name: str,
         "no_feature_engineering": "../data/updated/no_feature_engineering"
     }
 
-    max_workers = min(len(PREPROC_VARIANTS), multiprocessing.cpu_count())
-
-    with ProcessPoolExecutor(max_workers=max_workers) as executor:
-        future_to_variant = {executor.submit(process_variant, vn, vf, model_name,
-                                             pipeline_builder, search_class, param_grid,
-                                             use_sample_weight, model_filename,
-                                             predictions_subdir, search_kwargs): vn
-                             for vn, vf in PREPROC_VARIANTS.items()}
-        for future in as_completed(future_to_variant):
-            vn = future_to_variant[future]
-            try:
-                result = future.result()
-                if result:
-                    all_records.extend(result)
-            except Exception as exc:
-                logger.error(f"Variant {vn} generated an exception: {exc}", exc_info=True)
+    # Process each variant sequentially.
+    for vn, vf in PREPROC_VARIANTS.items():
+        try:
+            result = process_variant(vn, vf, model_name, pipeline_builder,
+                                     search_class, param_grid, use_sample_weight,
+                                     model_filename, predictions_subdir, search_kwargs)
+            all_records.extend(result)
+        except Exception as exc:
+            logger.error(f"Variant {vn} generated an exception: {exc}", exc_info=True)
 
     csv_path = Path(__file__).parent / "results" / metrics_filename
     import pandas as pd

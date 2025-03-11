@@ -8,7 +8,6 @@ preprocessed variants. Performance metrics are saved to a CSV.
 import numpy as np
 from sklearn.compose import TransformedTargetRegressor
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.experimental import enable_halving_search_cv  # noqa: F401
 from sklearn.model_selection import HalvingGridSearchCV
 from sklearn.pipeline import Pipeline
 
@@ -26,17 +25,25 @@ def rf_pipeline_builder(X_train) -> Pipeline:
 rf_param_grid = [
     {
         "regressor__regressor__bootstrap": [True],
-        "regressor__regressor__max_samples": [None, 0.8],
-        "regressor__regressor__n_estimators": [100, 300],
-        "regressor__regressor__max_depth": [None, 10],
-        "regressor__regressor__max_features": [None, "sqrt"]
+        "regressor__regressor__max_samples": [None, 0.8, 0.6],
+        "regressor__regressor__n_estimators": [50, 100, 300, 500, 1000],
+        "regressor__regressor__max_depth": [None, 10, 20, 30],
+        "regressor__regressor__min_samples_split": [2, 5, 10],
+        "regressor__regressor__min_samples_leaf": [1, 2, 4],
+        "regressor__regressor__max_features": [None, "sqrt", "log2"],
+        "regressor__regressor__criterion": ["squared_error", "absolute_error"],
+        "regressor__regressor__ccp_alpha": [0.0, 0.001, 0.01]
     },
     {
         "regressor__regressor__bootstrap": [False],
-        "regressor__regressor__max_samples": [None],
-        "regressor__regressor__n_estimators": [100, 300],
-        "regressor__regressor__max_depth": [None, 10],
-        "regressor__regressor__max_features": [None, "sqrt"]
+        "regressor__regressor__max_samples": [None],  # Must be None when bootstrap is False.
+        "regressor__regressor__n_estimators": [50, 100, 300, 500, 1000],
+        "regressor__regressor__max_depth": [None, 10, 20, 30],
+        "regressor__regressor__min_samples_split": [2, 5, 10],
+        "regressor__regressor__min_samples_leaf": [1, 2, 4],
+        "regressor__regressor__max_features": [None, "sqrt", "log2"],
+        "regressor__regressor__criterion": ["squared_error", "absolute_error"],
+        "regressor__regressor__ccp_alpha": [0.0, 0.001, 0.01]
     }
 ]
 

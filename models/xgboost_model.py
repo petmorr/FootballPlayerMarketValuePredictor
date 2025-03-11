@@ -30,7 +30,7 @@ def xgb_pipeline_builder(X_train) -> Pipeline:
         tree_method='hist',
         device='cuda',
         verbosity=1,
-        n_jobs=-1
+        n_jobs=1  # Use a single thread to avoid oversubscription
     )
     regressor = TransformedTargetRegressor(
         regressor=xgb_gpu,
@@ -39,8 +39,6 @@ def xgb_pipeline_builder(X_train) -> Pipeline:
     )
     return Pipeline(steps=[("preprocessor", preprocessor), ("regressor", regressor)])
 
-
-# Expanded comprehensive hyperparameter grid for XGBoost.
 xgb_param_grid = {
     "regressor__regressor__n_estimators": [100, 200, 300, 500],
     "regressor__regressor__max_depth": [3, 5, 7, 10, 15],
@@ -54,9 +52,6 @@ xgb_param_grid = {
 }
 
 if __name__ == "__main__":
-    import multiprocessing
-
-    multiprocessing.freeze_support()  # Required on Windows for multiprocessing
     run_training_pipeline(
         model_name="XGBoost",
         pipeline_builder=xgb_pipeline_builder,

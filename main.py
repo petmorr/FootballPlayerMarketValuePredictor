@@ -422,9 +422,13 @@ def model_creation():
             else:
                 flash("Random Forest model creation failed.", "danger")
                 logger.error("Random Forest model creation failed.")
-        elif model_choice == "RecurrentNeuralNetwork":
-            flash("Recurrent Neural Network functionality is not yet implemented.", "info")
-            logger.info("DNN model creation triggered (not yet implemented).")
+        elif model_choice == "XGBoost":
+            if run_command(["python", "./models/xgboost_model.py"]):
+                flash("XGBoost model created successfully.", "success")
+                logger.info("XGBoost model creation succeeded.")
+            else:
+                flash("XGBoost model creation failed.", "danger")
+                logger.error("XGBoost model creation failed.")
         else:
             flash("Unknown model choice.", "warning")
             logger.warning("Unknown model choice selected in model_creation.")
@@ -466,6 +470,8 @@ def parse_predicted_file_details(file_path: Path, base: Path) -> dict:
         model_name = "Linear Regression"
     elif "random_forest" in parts:
         model_name = "Random Forest"
+    elif "xgboost" in parts:
+        model_name = "XGBoost"
     fe_variant = "Unknown"
     for i, p in enumerate(parts):
         if p in ("linear_regression", "random_forest") and i + 1 < len(parts):
@@ -488,6 +494,7 @@ def model_evaluation():
     """
     lr_metrics_file = Path("models/results/performance_metrics_linear_regression.csv")
     rf_metrics_file = Path("models/results/performance_metrics_random_forest.csv")
+    xgboost_metrics_file = Path("models/results/performance_metrics_xgboost.csv")
     metrics = {}
     if lr_metrics_file.exists():
         try:
@@ -507,8 +514,17 @@ def model_evaluation():
             metrics["Random Forest"] = f"Error reading metrics: {e}"
     else:
         metrics["Random Forest"] = "Metrics file not found."
+    if xgboost_metrics_file.exists():
+        try:
+            xgboost_df = pd.read_csv(xgboost_metrics_file)
+            metrics["XGBoost"] = xgboost_df.to_html(classes="table table-striped table-bordered", index=False)
+        except Exception as e:
+            logger.error(f"Error reading XGBoost metrics: {e}")
+            metrics["XGBoost"] = f"Error reading metrics: {e}"
+    else:
+        metrics["XGBoost"] = "Metrics file not found."
 
-    predictions = {"Linear Regression": {}, "Random Forest": {}}
+    predictions = {"Linear Regression": {}, "Random Forest": {}, "XGBoost": {}}
 
     def insert_into_tree(details: dict) -> None:
         """
@@ -527,6 +543,7 @@ def model_evaluation():
     base = Path.cwd()
     lr_pred_dir = Path("data/predictions/linear_regression")
     rf_pred_dir = Path("data/predictions/random_forest")
+    xgboost_pred_dir = Path("data/predictions/xgboost")
     if lr_pred_dir.exists():
         for f in lr_pred_dir.rglob("*"):
             if f.is_file():
@@ -537,6 +554,12 @@ def model_evaluation():
             if f.is_file():
                 info = parse_predicted_file_details(f, base)
                 insert_into_tree(info)
+    if xgboost_pred_dir.exists():
+        for f in xgboost_pred_dir.rglob("*"):
+            if f.is_file():
+                info = parse_predicted_file_details(f, base)
+                insert_into_tree(info)
+
 
     search_results = None
     search_params = {}
@@ -564,6 +587,9 @@ def model_evaluation():
             elif selected_model == "Random Forest":
                 file_path = Path(
                     "data/predictions/random_forest") / selected_fe / f"predicted_updated_{selected_league}_{selected_season}.parquet"
+            elif selected_model == "XGBoost":
+                file_path = Path(
+                    "data/predictions/xgboost") / selected_fe / f"predicted_updated_{selected_league}_{selected_season}.parquet"
             else:
                 file_path = None
         if file_path is None or not file_path.exists():
