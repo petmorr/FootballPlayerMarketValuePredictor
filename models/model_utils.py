@@ -140,11 +140,7 @@ def predict_on_file(model, file_path: str, drop_cols: set, predictions_dir: Unio
 
 
 # --- XGBoost GPU Support ---
-try:
-    import cupy as cp
-except ImportError:
-    cp = None
-
+import cupy as cp
 from xgboost import XGBRegressor, DMatrix
 
 class XGBRegressorGPU:
@@ -152,26 +148,34 @@ class XGBRegressorGPU:
     A wrapper for XGBRegressor that ensures input data is converted to a GPU array.
     This class is defined at module level so that it is picklable.
     """
+
     def __init__(self, **kwargs):
+        # If GPU is available and tree_method is not specified, set it to 'gpu_hist'
+        if cp is not None and 'tree_method' not in kwargs:
+            kwargs['tree_method'] = 'gpu_hist'
         self._model = XGBRegressor(**kwargs)
 
     def fit(self, X, y, **kwargs):
+        if cp is not None:
+            X = cp.asarray(X)
+            y = cp.asarray(y)
         return self._model.fit(X, y, **kwargs)
 
     def predict(self, X, **kwargs):
         # Convert input data to a NumPy array.
         X_np = np.asarray(X)
-        # Convert to cupy array if available (GPU) otherwise leave on CPU.
+        # Convert to a CuPy array if available (GPU), otherwise leave on CPU.
         if cp is not None:
             X_gpu = cp.asarray(X_np)
+            # Create a DMatrix from the GPU input data.
+            dmat = DMatrix(X_gpu)
         else:
-            X_gpu = X_np
-        # Create a DMatrix from the input data.
-        dmat = DMatrix(X_gpu)
+            # Create a DMatrix from the CPU input data.
+            dmat = DMatrix(X_np)
         booster = self._model.get_booster()
-        # We now force prediction on CPU by not setting the predictor (to avoid warnings)
+        # Perform prediction on the same device used for training.
         y_pred = booster.predict(dmat, **kwargs)
-        return y_pred
+        return cp.asnumpy(y_pred) if cp is not None else y_pred
 
     def get_params(self, deep=True):
         return self._model.get_params(deep=deep)
@@ -183,7 +187,6 @@ class XGBRegressorGPU:
     def get_booster(self):
         return self._model.get_booster()
 # --- End XGBoost GPU Support ---
-
 
 def process_variant(variant_name: str,
                     variant_folder: str,
