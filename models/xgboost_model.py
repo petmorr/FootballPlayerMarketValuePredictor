@@ -2,14 +2,14 @@
 Full Pipeline for Training and Predicting Player Transfer Prices using XGBoost.
 
 This script uses XGBoost's XGBRegressorGPU (imported from model_utils) with an expanded comprehensive
-hyperparameter grid and GridSearchCV to train and evaluate the model on three preprocessed variants.
+hyperparameter grid and HalvingGridSearchCV to train and evaluate the model on three preprocessed variants.
 GPU acceleration is enabled by setting tree_method='hist' and device='cuda'.
 Performance metrics are saved to a CSV.
 """
 
 import numpy as np
 from sklearn.compose import TransformedTargetRegressor
-from sklearn.model_selection import GridSearchCV
+from sklearn.model_selection import HalvingGridSearchCV
 from sklearn.pipeline import Pipeline
 
 from model_utils import run_training_pipeline, build_preprocessor, XGBRegressorGPU
@@ -45,7 +45,7 @@ if __name__ == "__main__":
     run_training_pipeline(
         model_name="XGBoost",
         pipeline_builder=xgb_pipeline_builder,
-        search_class=GridSearchCV,
+        search_class=HalvingGridSearchCV,
         param_grid=xgb_param_grid,
         use_sample_weight=False,
         model_filename="xgboost_model",
