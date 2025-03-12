@@ -38,6 +38,5 @@ if __name__ == "__main__":
         use_sample_weight=True,
         model_filename="linear_regression_model",
         predictions_subdir="linear_regression",
-        metrics_filename="performance_metrics_linear_regression.csv",
-        search_kwargs={}
+        metrics_filename="performance_metrics_linear_regression.csv"
     )

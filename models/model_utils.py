@@ -290,12 +290,12 @@ def process_variant(variant_name: str,
     if not files:
         logger.error(f"No files found in {variant_folder}")
     else:
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-        with ThreadPoolExecutor(max_workers=10) as executor:
-            futures = [executor.submit(predict_on_file, best_model, file_path, pred_drop_cols, predictions_dir)
-                       for file_path in files]
-            for future in as_completed(futures):
-                future.result()
+        # Process each file sequentially to avoid concurrent GPU operations
+        for file_path in files:
+            try:
+                predict_on_file(best_model, file_path, pred_drop_cols, predictions_dir)
+            except Exception as e:
+                logger.error(f"Error processing file {file_path}: {e}", exc_info=True)
         logger.info(f"Prediction process completed for variant {variant_name}.")
     # --- GPU Memory Cleanup ---
     try:
@@ -316,8 +316,7 @@ def run_training_pipeline(model_name: str,
                           use_sample_weight: bool,
                           model_filename: str,
                           predictions_subdir: str,
-                          metrics_filename: str,
-                          search_kwargs: Optional[Dict[str, Any]] = None) -> None:
+                          metrics_filename: str):
     """
     Run the training and prediction pipeline for a given model across all preprocessed variants.
     This version processes each variant sequentially to avoid pickling issues.
@@ -345,7 +344,7 @@ def run_training_pipeline(model_name: str,
         try:
             result = process_variant(vn, vf, model_name, pipeline_builder,
                                      search_class, param_grid, use_sample_weight,
-                                     model_filename, predictions_subdir, search_kwargs)
+                                     model_filename, predictions_subdir)
             all_records.extend(result)
         except Exception as exc:
             logger.error(f"Variant {vn} generated an exception: {exc}", exc_info=True)

@@ -1,14 +1,14 @@
 """
 Full Pipeline for Training and Predicting Player Transfer Prices using Random Forest.
 
-This script uses HalvingGridSearchCV to train and evaluate a Random Forest model on three
+This script uses GridSearchCV to train and evaluate a Random Forest model on three
 preprocessed variants. Performance metrics are saved to a CSV.
 """
 
 import numpy as np
 from sklearn.compose import TransformedTargetRegressor
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.model_selection import HalvingGridSearchCV
+from sklearn.model_selection import GridSearchCV
 from sklearn.pipeline import Pipeline
 
 from model_utils import run_training_pipeline, build_preprocessor
@@ -51,11 +51,10 @@ if __name__ == "__main__":
     run_training_pipeline(
         model_name="Random Forest",
         pipeline_builder=rf_pipeline_builder,
-        search_class=HalvingGridSearchCV,
+        search_class=GridSearchCV,
         param_grid=rf_param_grid,
         use_sample_weight=False,
         model_filename="random_forest_model",
         predictions_subdir="random_forest",
-        metrics_filename="performance_metrics_random_forest.csv",
-        search_kwargs={"factor": 2}
+        metrics_filename="performance_metrics_random_forest.csv"
     )

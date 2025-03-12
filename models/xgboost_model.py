@@ -2,14 +2,14 @@
 Full Pipeline for Training and Predicting Player Transfer Prices using XGBoost.
 
 This script uses XGBoost's XGBRegressorGPU (imported from model_utils) with an expanded comprehensive
-hyperparameter grid and RandomizedSearchCV to train and evaluate the model on three preprocessed variants.
+hyperparameter grid and GridSearchCV to train and evaluate the model on three preprocessed variants.
 GPU acceleration is enabled by setting tree_method='hist' and device='cuda'.
 Performance metrics are saved to a CSV.
 """
 
 import numpy as np
 from sklearn.compose import TransformedTargetRegressor
-from sklearn.model_selection import RandomizedSearchCV
+from sklearn.model_selection import GridSearchCV
 from sklearn.pipeline import Pipeline
 
 from model_utils import run_training_pipeline, build_preprocessor, XGBRegressorGPU
@@ -25,18 +25,8 @@ def xgb_pipeline_builder(X_train) -> Pipeline:
     GPU acceleration is enabled by setting tree_method='hist' and device='cuda'.
     """
     preprocessor = build_preprocessor(X_train)
-    xgb_gpu = XGBRegressorGPU(
-        random_state=42,
-        tree_method='hist',
-        device='cuda',
-        verbosity=1,
-        n_jobs=1  # Use a single thread to avoid oversubscription
-    )
-    regressor = TransformedTargetRegressor(
-        regressor=xgb_gpu,
-        func=np.log1p,
-        inverse_func=np.expm1
-    )
+    xgb_gpu = XGBRegressorGPU(random_state=42, tree_method='hist', device='cuda', verbosity=1, n_jobs=-1)
+    regressor = TransformedTargetRegressor(regressor=xgb_gpu, func=np.log1p, inverse_func=np.expm1)
     return Pipeline(steps=[("preprocessor", preprocessor), ("regressor", regressor)])
 
 xgb_param_grid = {
@@ -55,11 +45,10 @@ if __name__ == "__main__":
     run_training_pipeline(
         model_name="XGBoost",
         pipeline_builder=xgb_pipeline_builder,
-        search_class=RandomizedSearchCV,
+        search_class=GridSearchCV,
         param_grid=xgb_param_grid,
         use_sample_weight=False,
         model_filename="xgboost_model",
         predictions_subdir="xgboost",
-        metrics_filename="performance_metrics_xgboost.csv",
-        search_kwargs={"n_iter": 200, "random_state": 42}
+        metrics_filename="performance_metrics_xgboost.csv"
     )
