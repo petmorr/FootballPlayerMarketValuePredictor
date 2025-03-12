@@ -231,6 +231,7 @@ def process_variant(variant_name: str,
             cv=cv,
             scoring="neg_mean_squared_error",
             verbose=1,
+            n_jobs=-1,
             **search_kwargs
         )
     else:
@@ -240,6 +241,7 @@ def process_variant(variant_name: str,
             cv=cv,
             scoring="neg_mean_squared_error",
             verbose=1,
+            n_jobs=-1,
             **search_kwargs
         )
     logger.info(f"Starting hyperparameter search for {model_name} on variant: {variant_name}")
