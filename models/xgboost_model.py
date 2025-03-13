@@ -30,15 +30,15 @@ def xgb_pipeline_builder(X_train) -> Pipeline:
     return Pipeline(steps=[("preprocessor", preprocessor), ("regressor", regressor)])
 
 xgb_param_grid = {
-    "regressor__regressor__n_estimators": [100, 200, 300, 500],
-    "regressor__regressor__max_depth": [3, 5, 7, 10, 15],
-    "regressor__regressor__learning_rate": [0.01, 0.05, 0.1, 0.2],
-    "regressor__regressor__subsample": [0.5, 0.7, 1.0],
-    "regressor__regressor__colsample_bytree": [0.5, 0.7, 1.0],
-    "regressor__regressor__gamma": [0, 0.1, 0.5, 1],
-    "regressor__regressor__min_child_weight": [1, 3, 5, 10],
-    "regressor__regressor__reg_alpha": [0, 0.1, 1, 10],
-    "regressor__regressor__reg_lambda": [1, 1.5, 2, 3]
+    "regressor__regressor__n_estimators": [100, 300, 500],
+    "regressor__regressor__max_depth": [3, 7, 15],
+    "regressor__regressor__learning_rate": [0.05, 0.1, 0.2],
+    "regressor__regressor__subsample": [0.7, 1.0],
+    "regressor__regressor__colsample_bytree": [0.7, 1.0],
+    "regressor__regressor__gamma": [0, 0.5, 1],
+    "regressor__regressor__min_child_weight": [1, 5],
+    "regressor__regressor__reg_alpha": [0, 1],
+    "regressor__regressor__reg_lambda": [1, 2]
 }
 
 if __name__ == "__main__":
