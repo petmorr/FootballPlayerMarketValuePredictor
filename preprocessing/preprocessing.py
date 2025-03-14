@@ -1,9 +1,9 @@
 """
-Preprocessing pipeline for football player data.
+preprocessing.py
 
-This module reads raw CSV files, performs data cleaning, normalization,
-aggregation, and applies various feature engineering pipelines to generate
-three dataset variants:
+This module implements the preprocessing pipeline for football player data.
+It reads raw CSV files, performs data cleaning, normalization, and feature engineering,
+and then saves three dataset variants:
   - Enhanced Feature Engineering
   - Basic Feature Engineering
   - No Feature Engineering
@@ -20,9 +20,9 @@ import pandas as pd
 
 from logging_config import configure_logger
 
-# ------------------------------------------------------------------------------
+# =============================================================================
 # Logger & Paths Setup
-# ------------------------------------------------------------------------------
+# =============================================================================
 logger = configure_logger("preprocessing", "preprocessing.log")
 
 RAW_DATA_FOLDER: Path = Path("../data/scraped")
@@ -36,9 +36,9 @@ NO_FE_FOLDER: Path = CLEANED_DATA_FOLDER / "no_feature_engineering"
 for folder in [ENHANCED_FE_FOLDER, BASIC_FE_FOLDER, NO_FE_FOLDER]:
     folder.mkdir(parents=True, exist_ok=True)
 
-# ------------------------------------------------------------------------------
+# =============================================================================
 # Expected Columns & Metadata
-# ------------------------------------------------------------------------------
+# =============================================================================
 EXPECTED_COLUMNS_ORDER = [
     'rank', 'player', 'country_code', 'position', 'squad', 'age', 'born',
     'matches_played', 'starts', 'minutes_played', '90s_played', 'goals',
@@ -52,12 +52,12 @@ EXPECTED_COLUMNS_ORDER = [
     'progressive_carries', 'progressive_passes', 'progressive_receives',
     'matches'
 ]
-ESSENTIAL_COLUMNS = {'rank', 'player', 'country_code', 'position', 'squad', 'age',
-                     'born', 'matches_played', 'minutes_played', 'goals'}
+ESSENTIAL_COLUMNS = {'rank', 'player', 'country_code', 'position', 'squad', 'age', 'born',
+                     'matches_played', 'minutes_played', 'goals'}
 
-# ------------------------------------------------------------------------------
+# =============================================================================
 # Country Code Mapping
-# ------------------------------------------------------------------------------
+# =============================================================================
 COUNTRY_CODE_MAPPING = {
     'NGA': 'Nigeria', 'BRA': 'Brazil', 'ENG': 'England', 'FRA': 'France',
     'GER': 'Germany', 'ESP': 'Spain', 'ITA': 'Italy', 'ARG': 'Argentina',
@@ -82,12 +82,19 @@ COUNTRY_CODE_MAPPING = {
     'LUX': 'Luxembourg', 'TOG': 'Togo', 'SUR': 'Suriname'
 }
 
-# ------------------------------------------------------------------------------
+
+# =============================================================================
 # Helper Functions for Data Processing
-# ------------------------------------------------------------------------------
+# =============================================================================
 def flatten_columns(df: pd.DataFrame) -> pd.DataFrame:
     """
     Flatten multi-index header columns by joining levels with an underscore.
+
+    Args:
+        df (pd.DataFrame): The DataFrame with potentially multi-index headers.
+
+    Returns:
+        pd.DataFrame: The DataFrame with flattened column names.
     """
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = [
@@ -99,7 +106,13 @@ def flatten_columns(df: pd.DataFrame) -> pd.DataFrame:
 
 def normalize_column_names(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Convert column names to lower-case and replace spaces with underscores.
+    Normalize column names to lower-case and replace spaces with underscores.
+
+    Args:
+        df (pd.DataFrame): The DataFrame.
+
+    Returns:
+        pd.DataFrame: The DataFrame with normalized column names.
     """
     df.columns = df.columns.str.lower().str.replace(' ', '_', regex=True)
     return df
@@ -107,7 +120,16 @@ def normalize_column_names(df: pd.DataFrame) -> pd.DataFrame:
 
 def rename_columns(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Rename columns to standardized names based on EXPECTED_COLUMNS_ORDER plus metadata.
+    Rename DataFrame columns to a standard order based on expected columns.
+
+    Args:
+        df (pd.DataFrame): The DataFrame with raw columns.
+
+    Returns:
+        pd.DataFrame: The DataFrame with renamed columns.
+
+    Raises:
+        ValueError: If the DataFrame does not have enough columns.
     """
     total_expected = len(EXPECTED_COLUMNS_ORDER) + 2  # plus league and season
     if df.shape[1] < total_expected:
@@ -119,7 +141,13 @@ def rename_columns(df: pd.DataFrame) -> pd.DataFrame:
 
 def ensure_data_types(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Convert numeric columns and set low-unique object columns to categorical.
+    Convert numeric columns to proper types and set low-unique object columns as categorical.
+
+    Args:
+        df (pd.DataFrame): The DataFrame to process.
+
+    Returns:
+        pd.DataFrame: The DataFrame with ensured data types.
     """
     non_numeric = {'player', 'country_code', 'position', 'squad', 'born', 'league', 'season'}
     numeric_cols = set(EXPECTED_COLUMNS_ORDER) - non_numeric
@@ -133,7 +161,13 @@ def ensure_data_types(df: pd.DataFrame) -> pd.DataFrame:
 
 def handle_missing_data(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Drop columns with excessive missing values and fill remaining missing entries.
+    Drop columns with excessive missing values and fill missing entries with medians or modes.
+
+    Args:
+        df (pd.DataFrame): The DataFrame.
+
+    Returns:
+        pd.DataFrame: The DataFrame after handling missing data.
     """
     threshold = int(0.3 * len(df))
     df.dropna(thresh=threshold, axis=1, inplace=True)
@@ -147,7 +181,13 @@ def handle_missing_data(df: pd.DataFrame) -> pd.DataFrame:
 
 def feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Apply simple feature engineering: compute playing time and performance over metrics.
+    Apply basic feature engineering by computing ratios and rates.
+
+    Args:
+        df (pd.DataFrame): The DataFrame.
+
+    Returns:
+        pd.DataFrame: The DataFrame with new basic features.
     """
     if 'minutes_played' in df.columns and 'matches_played' in df.columns:
         df['minutes_per_match'] = df['minutes_played'] / df['matches_played'].replace(0, np.nan)
@@ -167,7 +207,13 @@ def feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
 
 def additional_enhancements(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Clean data by removing unrealistic values and compute basic performance consistency.
+    Apply additional data enhancements such as filtering unrealistic values.
+
+    Args:
+        df (pd.DataFrame): The DataFrame.
+
+    Returns:
+        pd.DataFrame: The enhanced DataFrame.
     """
     if 'age' in df.columns:
         df = df[(df['age'] >= 16) & (df['age'] <= 45)]
@@ -182,8 +228,13 @@ def additional_enhancements(df: pd.DataFrame) -> pd.DataFrame:
 
 def advanced_feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Create advanced features including playing time, offensive metrics, per-90 comparisons,
-    non-penalty metrics, and progressive actions.
+    Create advanced features including efficiency metrics, overperformance, and progressive actions.
+
+    Args:
+        df (pd.DataFrame): The DataFrame.
+
+    Returns:
+        pd.DataFrame: The DataFrame with advanced features.
     """
     if 'minutes_played' in df.columns and 'matches_played' in df.columns:
         df['minutes_per_match'] = df['minutes_played'] / df['matches_played'].replace(0, np.nan)
@@ -236,7 +287,13 @@ def advanced_feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
 
 def finalize_data(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Fill any remaining numeric missing values with zero.
+    Fill any remaining missing numeric values with zero.
+
+    Args:
+        df (pd.DataFrame): The DataFrame.
+
+    Returns:
+        pd.DataFrame: The finalized DataFrame.
     """
     numeric_cols = df.select_dtypes(include=[np.number]).columns
     df[numeric_cols] = df[numeric_cols].fillna(0)
@@ -246,6 +303,12 @@ def finalize_data(df: pd.DataFrame) -> pd.DataFrame:
 def clean_country_codes(df: pd.DataFrame) -> pd.DataFrame:
     """
     Standardize the 'country_code' column.
+
+    Args:
+        df (pd.DataFrame): The DataFrame.
+
+    Returns:
+        pd.DataFrame: The DataFrame with standardized country codes.
     """
     if 'country_code' in df.columns:
         df['country_code'] = (df['country_code']
@@ -260,7 +323,17 @@ def clean_country_codes(df: pd.DataFrame) -> pd.DataFrame:
 
 def data_integrity_checks(df: pd.DataFrame, file_path: str) -> pd.DataFrame:
     """
-    Ensure essential columns exist and warn about duplicates.
+    Perform integrity checks on the DataFrame by verifying essential columns and reporting duplicates.
+
+    Args:
+        df (pd.DataFrame): The DataFrame.
+        file_path (str): The file path for logging context.
+
+    Returns:
+        pd.DataFrame: The DataFrame if integrity checks pass.
+
+    Raises:
+        ValueError: If essential columns are missing.
     """
     if 'country_code' in df.columns:
         unmapped = df[~df['country_code'].isin(COUNTRY_CODE_MAPPING.keys())]
@@ -280,7 +353,13 @@ def data_integrity_checks(df: pd.DataFrame, file_path: str) -> pd.DataFrame:
 
 def standardize_country_column(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Rename 'nation' to 'country_code' if necessary.
+    Rename 'nation' column to 'country_code' if necessary.
+
+    Args:
+        df (pd.DataFrame): The DataFrame.
+
+    Returns:
+        pd.DataFrame: The DataFrame with the standardized country column.
     """
     if 'nation' in df.columns and 'country_code' not in df.columns:
         df.rename(columns={'nation': 'country_code'}, inplace=True)
@@ -289,7 +368,13 @@ def standardize_country_column(df: pd.DataFrame) -> pd.DataFrame:
 
 def remove_header_rows(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Remove repeated header rows based on the 'player' column.
+    Remove repeated header rows identified by the 'player' column.
+
+    Args:
+        df (pd.DataFrame): The DataFrame.
+
+    Returns:
+        pd.DataFrame: The DataFrame without extra header rows.
     """
     if 'player' in df.columns:
         df = df[~df['player'].astype(str).str.strip().str.lower().eq('player')]
@@ -298,7 +383,13 @@ def remove_header_rows(df: pd.DataFrame) -> pd.DataFrame:
 
 def remove_redundant_columns(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Remove columns that are redundant if fully replaced by feature-engineered metrics.
+    Remove redundant columns that are fully replaced by feature-engineered metrics.
+
+    Args:
+        df (pd.DataFrame): The DataFrame.
+
+    Returns:
+        pd.DataFrame: The DataFrame after dropping redundant columns.
     """
     redundant_cols = {
         'born', 'matches_played', 'starts', 'minutes_played', '90s_played',
@@ -321,8 +412,15 @@ def aggregate_duplicate_players(df: pd.DataFrame, weight_col: str = "minutes_pla
     """
     Aggregate duplicate player records grouped by 'player' (and 'season' if present).
 
-    Numeric columns are aggregated using a weighted average based on the weight column,
-    and categorical columns are combined.
+    Numeric columns are aggregated using a weighted average based on the specified weight column.
+    Categorical columns are merged by combining unique values.
+
+    Args:
+        df (pd.DataFrame): The DataFrame containing player data.
+        weight_col (str): The column used for weighted averaging.
+
+    Returns:
+        pd.DataFrame: The aggregated DataFrame with unique player records and a new 'rank' column.
     """
     if "rank" in df.columns:
         df = df.drop(columns=["rank"])
@@ -375,12 +473,18 @@ def aggregate_duplicate_players(df: pd.DataFrame, weight_col: str = "minutes_pla
         f"Aggregated duplicate players: {aggregated_df.shape[0]} unique records based on {group_cols}, new rank assigned.")
     return aggregated_df
 
-# ------------------------------------------------------------------------------
-# Main Preprocessing Function
-# ------------------------------------------------------------------------------
+
+# =============================================================================
+# Main Preprocessing Functions
+# =============================================================================
 def preprocess_file(file_path: Path, league: str, season: str) -> None:
     """
-    Process a single CSV file and generate three dataset variants.
+    Process a single CSV file and generate three dataset variants (enhanced, basic, and no feature engineering).
+
+    Args:
+        file_path (Path): Path to the raw CSV file.
+        league (str): The league name.
+        season (str): The season string.
     """
     try:
         logger.info(f"Processing file: {file_path}")
@@ -415,7 +519,7 @@ def preprocess_file(file_path: Path, league: str, season: str) -> None:
         df['league'] = league
         df['season'] = season
 
-        # Variant 1: Enhanced Feature Engineering.
+        # Variant 1: Enhanced Feature Engineering
         df_enhanced = df.copy()
         df_enhanced = feature_engineering(df_enhanced)
         df_enhanced = additional_enhancements(df_enhanced)
@@ -424,14 +528,14 @@ def preprocess_file(file_path: Path, league: str, season: str) -> None:
         df_enhanced = data_integrity_checks(df_enhanced, str(file_path))
         df_enhanced = remove_redundant_columns(df_enhanced)
 
-        # Variant 2: Basic Feature Engineering.
+        # Variant 2: Basic Feature Engineering
         df_basic = df.copy()
         df_basic = feature_engineering(df_basic)
         df_basic = additional_enhancements(df_basic)
         df_basic = finalize_data(df_basic)
         df_basic = data_integrity_checks(df_basic, str(file_path))
 
-        # Variant 3: No Feature Engineering.
+        # Variant 3: No Feature Engineering
         df_none = df.copy()
         df_none = additional_enhancements(df_none)
         df_none = finalize_data(df_none)
@@ -455,6 +559,9 @@ def preprocess_file(file_path: Path, league: str, season: str) -> None:
 def process_single_file(file_name: str) -> None:
     """
     Process a single CSV file; expected filename format: <league>_<season>_...
+
+    Args:
+        file_name (str): The CSV file name.
     """
     if file_name.endswith('.csv'):
         try:
@@ -469,6 +576,9 @@ def process_single_file(file_name: str) -> None:
 def process_all_files(input_folder: Path) -> None:
     """
     Process all CSV files in the input folder using multiprocessing.
+
+    Args:
+        input_folder (Path): The folder containing raw CSV files.
     """
     files = [f.name for f in input_folder.glob("*.csv")]
     with Pool(processes=os.cpu_count()) as pool:

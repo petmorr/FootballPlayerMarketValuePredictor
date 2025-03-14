@@ -1,8 +1,8 @@
 """
-Web scraping module for football player data.
+web_scrape.py
 
-This script uses Selenium and BeautifulSoup to scrape player statistics from FBref,
-processes the HTML to extract the desired table, and saves the data as CSV files.
+This module uses Selenium and BeautifulSoup to scrape player statistics from FBref.
+It processes the scraped HTML to extract a statistics table and saves the data as CSV files.
 """
 
 import os
@@ -20,14 +20,14 @@ from webdriver_manager.chrome import ChromeDriverManager
 
 from logging_config import configure_logger
 
-# ------------------------------------------------------------------------------
+# =============================================================================
 # Logger Configuration
-# ------------------------------------------------------------------------------
+# =============================================================================
 logger = configure_logger("web_scrape", "web_scrape.log")
 
-# ------------------------------------------------------------------------------
+# =============================================================================
 # Constants & Configuration
-# ------------------------------------------------------------------------------
+# =============================================================================
 LEAGUES = {
     "Premier-League": "https://fbref.com/en/comps/9/",
     "La-Liga": "https://fbref.com/en/comps/12/",
@@ -39,12 +39,19 @@ SEASONS = ["2023-2024", "2022-2023", "2021-2022", "2020-2021", "2019-2020"]
 OUTPUT_DIR = "../data/scraped"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-# ------------------------------------------------------------------------------
+
+# =============================================================================
 # Helper Functions
-# ------------------------------------------------------------------------------
+# =============================================================================
 def configure_driver() -> webdriver.Chrome:
     """
     Configure and initialize the Chrome WebDriver in headless mode with a custom user-agent.
+
+    Returns:
+        webdriver.Chrome: Configured Chrome WebDriver.
+
+    Raises:
+        Exception: If the WebDriver cannot be configured.
     """
     chrome_options = Options()
     chrome_options.add_argument("--headless")
@@ -68,7 +75,15 @@ def configure_driver() -> webdriver.Chrome:
 
 def build_league_season_url(league_name: str, base_url: str, season: str) -> str:
     """
-    Build the URL for scraping based on the league, base URL, and season.
+    Build the URL for scraping based on league, base URL, and season.
+
+    Args:
+        league_name (str): The league name.
+        base_url (str): The base URL for the league.
+        season (str): The season (e.g., '2023-2024').
+
+    Returns:
+        str: The constructed URL.
     """
     season_url = season.replace('-', '_')
     league_url = league_name.replace('-', '_')
@@ -78,23 +93,31 @@ def build_league_season_url(league_name: str, base_url: str, season: str) -> str
 
 def get_player_data_selenium(url: str, driver: webdriver.Chrome) -> Optional[pd.DataFrame]:
     """
-    Scrape player statistics data from a given URL using Selenium.
+    Scrape player statistics from a given URL using Selenium.
 
-    The function tries multiple approaches to locate the table with ID "stats_standard".
+    The function searches for a table with the ID 'stats_standard'. If not found,
+    it attempts to extract the table from HTML comments.
+
+    Args:
+        url (str): The URL to scrape.
+        driver (webdriver.Chrome): The Selenium WebDriver instance.
+
+    Returns:
+        Optional[pd.DataFrame]: DataFrame containing the scraped data, or None if scraping fails.
     """
     try:
         logger.info(f"Accessing URL: {url}")
         driver.get(url)
-        WebDriverWait(driver, 10).until(
-            lambda d: d.execute_script("return document.readyState") == "complete"
-        )
+        WebDriverWait(driver, 10).until(lambda d: d.execute_script("return document.readyState") == "complete")
         time.sleep(2)  # Additional delay for dynamic content
         html = driver.page_source
         soup = BeautifulSoup(html, "html.parser")
 
+        # Attempt to find the primary table
         table = soup.find("table", id="stats_standard")
         table_html = str(table) if table else None
 
+        # Check within a specific div if not found
         if not table_html:
             div_all = soup.find("div", id="all_stats_standard")
             if div_all:
@@ -104,6 +127,7 @@ def get_player_data_selenium(url: str, driver: webdriver.Chrome) -> Optional[pd.
                         table_html = comment
                         break
 
+        # Fallback: search all comments in the page
         if not table_html:
             comments = soup.find_all(string=lambda text: isinstance(text, Comment))
             for comment in comments:
@@ -132,8 +156,8 @@ def scrape_league_data() -> None:
     """
     Scrape player data for all specified leagues and seasons.
 
-    For each league and season, the function builds the URL, scrapes the data,
-    appends metadata, and saves the result as a CSV file.
+    For each league and season, build the URL, scrape the data,
+    append metadata (league and season), and save as a CSV file.
     """
     driver = configure_driver()
     try:

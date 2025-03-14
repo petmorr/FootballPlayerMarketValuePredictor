@@ -1,8 +1,10 @@
 """
+linear_regression_model.py
+
 Full Pipeline for Training and Predicting Player Transfer Prices using Improved Linear Regression.
 
 This script uses Ridge regression with GridSearchCV to train and evaluate the model on three
-preprocessed variants. Performance metrics are saved to a CSV.
+preprocessed dataset variants. Performance metrics are saved to a CSV file.
 """
 
 import numpy as np
@@ -15,13 +17,26 @@ from model_utils import run_training_pipeline, build_preprocessor
 
 
 def lr_pipeline_builder(X_train) -> Pipeline:
-    """Builds the pipeline for Ridge Regression."""
+    """
+    Build a scikit-learn pipeline for Ridge Regression.
+
+    This function creates a pipeline that first preprocesses the training data using a common
+    preprocessor and then applies Ridge regression wrapped in a TransformedTargetRegressor
+    to apply a log1p transform to the target variable.
+
+    Args:
+        X_train: The training features used to fit the preprocessor.
+
+    Returns:
+        Pipeline: A scikit-learn pipeline with preprocessing and regression steps.
+    """
     preprocessor = build_preprocessor(X_train)
     ridge = Ridge(random_state=42)
     regressor = TransformedTargetRegressor(regressor=ridge, func=np.log1p, inverse_func=np.expm1)
     return Pipeline(steps=[("preprocessor", preprocessor), ("regressor", regressor)])
 
 
+# Define hyperparameter grid for Ridge regression.
 lr_param_grid = {
     "regressor__regressor__alpha": [1e-4, 1e-3, 1e-2, 1e-1, 1, 10, 100],
     "regressor__regressor__solver": ["cholesky", "lsqr"],

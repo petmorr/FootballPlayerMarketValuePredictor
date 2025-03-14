@@ -1,5 +1,11 @@
 """
+model_utils.py
+
 Common utilities for model training and prediction.
+
+This module includes functions for loading data, computing sample weights,
+selecting features and targets, building preprocessors, splitting data,
+evaluating models, generating predictions, and supporting GPU-accelerated XGBoost.
 """
 
 import glob
@@ -23,7 +29,18 @@ logger = configure_logger("model_utils", "model_utils.log")
 
 
 def load_updated_data(data_dir: str) -> pd.DataFrame:
-    """Load and concatenate all Parquet files from the specified folder."""
+    """
+    Load and concatenate all Parquet files from the specified directory.
+
+    Args:
+        data_dir (str): Directory containing updated Parquet files.
+
+    Returns:
+        pd.DataFrame: Combined DataFrame from all files.
+
+    Raises:
+        FileNotFoundError: If no files matching the pattern are found.
+    """
     file_pattern = os.path.join(data_dir, "updated_*.parquet")
     files = glob.glob(file_pattern)
     if not files:
@@ -36,7 +53,16 @@ def load_updated_data(data_dir: str) -> pd.DataFrame:
 
 
 def compute_sample_weights(y: pd.Series, factor: float = 1.5) -> np.array:
-    """Compute sample weights inversely proportional to the deviation from the median."""
+    """
+    Compute sample weights inversely proportional to deviation from the median.
+
+    Args:
+        y (pd.Series): Target values.
+        factor (float): Scaling factor for the median absolute deviation.
+
+    Returns:
+        np.array: Computed sample weights.
+    """
     median = np.median(y)
     mad = np.median(np.abs(y - median))
     weights = 1 / (1 + np.abs(y - median) / (mad * factor + 1e-6))
@@ -45,9 +71,17 @@ def compute_sample_weights(y: pd.Series, factor: float = 1.5) -> np.array:
 
 def select_features_and_target(df: pd.DataFrame, drop_cols: Optional[set] = None) -> Tuple[pd.DataFrame, pd.Series]:
     """
-    Select predictor features and the target variable ('Market Value').
+    Select predictor features and target ('Market Value') from the DataFrame.
 
-    Keeps the 'player' column for grouping.
+    Args:
+        df (pd.DataFrame): The input DataFrame.
+        drop_cols (Optional[set]): Set of columns to drop from predictors.
+
+    Returns:
+        Tuple[pd.DataFrame, pd.Series]: Features DataFrame and target Series.
+
+    Raises:
+        ValueError: If 'Market Value' column is missing.
     """
     if drop_cols is None:
         drop_cols = {"league", "season", "born", "country_code", "squad"}
@@ -63,7 +97,15 @@ def select_features_and_target(df: pd.DataFrame, drop_cols: Optional[set] = None
 
 
 def build_preprocessor(X: pd.DataFrame) -> ColumnTransformer:
-    """Build a ColumnTransformer for preprocessing numeric and categorical features."""
+    """
+    Build a ColumnTransformer to preprocess numeric and categorical features.
+
+    Args:
+        X (pd.DataFrame): The features DataFrame.
+
+    Returns:
+        ColumnTransformer: The configured preprocessor.
+    """
     numeric_features = X.select_dtypes(include=["int64", "float64"]).columns.tolist()
     if "player" in numeric_features:
         numeric_features.remove("player")
@@ -90,7 +132,16 @@ def split_data(X: pd.DataFrame, y: pd.Series, groups: pd.Series, random_state: i
                ) -> Tuple[
     pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, pd.Series, pd.Series, pd.Series]:
     """
-    Split data into training (60%), validation (20%), and test (20%) sets using group‑aware splitting.
+    Split data into training (60%), validation (20%), and test (20%) sets using group-aware splitting.
+
+    Args:
+        X (pd.DataFrame): Features DataFrame.
+        y (pd.Series): Target values.
+        groups (pd.Series): Groups for splitting.
+        random_state (int): Random seed for reproducibility.
+
+    Returns:
+        Tuple containing training, validation, and test splits for X, y, and groups.
     """
     from sklearn.model_selection import GroupShuffleSplit
     gss = GroupShuffleSplit(test_size=0.2, random_state=random_state)
@@ -110,7 +161,18 @@ def split_data(X: pd.DataFrame, y: pd.Series, groups: pd.Series, random_state: i
 
 def evaluate_model(model, X: pd.DataFrame, y: pd.Series, dataset_name: str = "Dataset"
                    ) -> Tuple[float, float, float, float, float]:
-    """Evaluate the model using various regression metrics."""
+    """
+    Evaluate a regression model using various metrics.
+
+    Args:
+        model: The trained model.
+        X (pd.DataFrame): Features to predict on.
+        y (pd.Series): True target values.
+        dataset_name (str): Label for the dataset (used for logging).
+
+    Returns:
+        Tuple[float, float, float, float, float]: RMSE, R², MAE, MedAE, and MAPE.
+    """
     predictions = model.predict(X)
     rmse = np.sqrt(mean_squared_error(y, predictions))
     r2 = r2_score(y, predictions)
@@ -124,9 +186,15 @@ def evaluate_model(model, X: pd.DataFrame, y: pd.Series, dataset_name: str = "Da
 
 def predict_on_file(model, file_path: str, drop_cols: set, predictions_dir: Union[str, Path]) -> None:
     """
-    Generate predictions for a single file and save the results.
+    Generate predictions for a single Parquet file and save the results.
+
+    Args:
+        model: The trained regression model.
+        file_path (str): Path to the input Parquet file.
+        drop_cols (set): Set of columns to drop from predictors.
+        predictions_dir (Union[str, Path]): Directory to save predictions.
     """
-    logger.info(f"Processing file: {file_path}")
+    logger.info(f"Processing file for prediction: {file_path}")
     df = pd.read_parquet(file_path)
     df_pred = df.copy()
     X_pred = df.drop(columns=drop_cols, errors="ignore")
@@ -145,48 +213,90 @@ from xgboost import XGBRegressor, DMatrix
 
 class XGBRegressorGPU:
     """
-    A wrapper for XGBRegressor that ensures input data is converted to a GPU array.
-    This class is defined at module level so that it is picklable.
+    GPU-accelerated wrapper for XGBRegressor.
+
+    This wrapper ensures that input data is converted to GPU arrays if available.
     """
 
     def __init__(self, **kwargs):
-        # If GPU is available and tree_method is not specified, set it to 'gpu_hist'
+        # Enable GPU acceleration by setting tree_method to 'gpu_hist' if not provided.
         if cp is not None and 'tree_method' not in kwargs:
             kwargs['tree_method'] = 'gpu_hist'
         self._model = XGBRegressor(**kwargs)
 
     def fit(self, X, y, **kwargs):
+        """
+        Fit the XGBRegressor model.
+
+        Args:
+            X: Feature matrix.
+            y: Target vector.
+            **kwargs: Additional parameters.
+
+        Returns:
+            Fitted model.
+        """
         if cp is not None:
             X = cp.asarray(X)
             y = cp.asarray(y)
         return self._model.fit(X, y, **kwargs)
 
     def predict(self, X, **kwargs):
-        # Convert input data to a NumPy array.
+        """
+        Predict using the XGBRegressor model.
+
+        Args:
+            X: Feature matrix.
+            **kwargs: Additional prediction parameters.
+
+        Returns:
+            np.array: Predictions.
+        """
         X_np = np.asarray(X)
-        # Convert to a CuPy array if available (GPU), otherwise leave on CPU.
         if cp is not None:
             X_gpu = cp.asarray(X_np)
-            # Create a DMatrix from the GPU input data.
             dmat = DMatrix(X_gpu)
         else:
-            # Create a DMatrix from the CPU input data.
             dmat = DMatrix(X_np)
         booster = self._model.get_booster()
-        # Perform prediction on the same device used for training.
         y_pred = booster.predict(dmat, **kwargs)
         return cp.asnumpy(y_pred) if cp is not None else y_pred
 
     def get_params(self, deep=True):
+        """
+        Get model parameters.
+
+        Args:
+            deep (bool): Whether to include nested objects.
+
+        Returns:
+            dict: Model parameters.
+        """
         return self._model.get_params(deep=deep)
 
     def set_params(self, **params):
+        """
+        Set model parameters.
+
+        Args:
+            **params: Parameters to set.
+
+        Returns:
+            self
+        """
         self._model.set_params(**params)
         return self
 
     def get_booster(self):
+        """
+        Get the underlying XGBoost booster.
+
+        Returns:
+            Booster: The booster object.
+        """
         return self._model.get_booster()
 # --- End XGBoost GPU Support ---
+
 
 def process_variant(variant_name: str,
                     variant_folder: str,
@@ -199,10 +309,22 @@ def process_variant(variant_name: str,
                     predictions_subdir: str,
                     search_kwargs: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
     """
-    Process a single feature‑engineering variant.
+    Process a single feature-engineering variant by training, evaluating, and generating predictions.
 
-    This function loads data, builds the pipeline, performs hyperparameter search, evaluates the model,
-    saves predictions, and returns performance records for the variant.
+    Args:
+        variant_name (str): Name of the variant.
+        variant_folder (str): Folder path containing updated data for the variant.
+        model_name (str): Name of the model.
+        pipeline_builder: Callable that builds a pipeline from training data.
+        search_class: Hyperparameter search class.
+        param_grid (Union[Dict, List[Dict]]): Hyperparameter grid.
+        use_sample_weight (bool): Whether to use sample weights.
+        model_filename (str): Filename prefix for saving the model.
+        predictions_subdir (str): Subdirectory for saving predictions.
+        search_kwargs (Optional[Dict[str, Any]]): Additional search parameters.
+
+    Returns:
+        List[Dict[str, Any]]: Performance records for the variant.
     """
     import joblib
     drop_cols = {"league", "season", "born", "country_code", "squad", "rank", "position"}
@@ -211,9 +333,8 @@ def process_variant(variant_name: str,
     X_all, y_all = select_features_and_target(df, drop_cols=drop_cols)
     groups_all = X_all["player"]
     X_all = X_all.drop(columns=["player"], errors="ignore")
-    X_train, X_val, X_test, y_train, y_val, y_test, groups_train, _ = split_data(
-        X_all, y_all, groups_all, random_state=42
-    )
+    X_train, X_val, X_test, y_train, y_val, y_test, groups_train, _ = split_data(X_all, y_all, groups_all,
+                                                                                 random_state=42)
     fit_params = {}
     if use_sample_weight:
         sample_weights = compute_sample_weights(y_train)
@@ -223,7 +344,7 @@ def process_variant(variant_name: str,
     cv = GroupKFold(n_splits=5)
     if search_kwargs is None:
         search_kwargs = {}
-    # If using RandomizedSearchCV, pass param_distributions instead of param_grid
+    # Support both RandomizedSearchCV and others.
     if search_class.__name__ == "RandomizedSearchCV":
         search_obj = search_class(
             estimator=pipeline,
@@ -251,10 +372,8 @@ def process_variant(variant_name: str,
     logger.info(f"Hyperparameter search for variant {variant_name} completed in {elapsed:.2f} seconds.")
     logger.info(f"Best hyperparameters for variant {variant_name}: {search_obj.best_params_}")
     best_model = search_obj.best_estimator_
-    val_metrics = evaluate_model(best_model, X_val, y_val,
-                                 dataset_name=f"Validation ({variant_name} - {model_name})")
-    test_metrics = evaluate_model(best_model, X_test, y_test,
-                                  dataset_name=f"Test ({variant_name} - {model_name})")
+    val_metrics = evaluate_model(best_model, X_val, y_val, dataset_name=f"Validation ({variant_name} - {model_name})")
+    test_metrics = evaluate_model(best_model, X_test, y_test, dataset_name=f"Test ({variant_name} - {model_name})")
     performance = [
         {
             "variant": variant_name,
@@ -292,22 +411,18 @@ def process_variant(variant_name: str,
     if not files:
         logger.error(f"No files found in {variant_folder}")
     else:
-        # Process each file sequentially to avoid concurrent GPU operations
         for file_path in files:
             try:
                 predict_on_file(best_model, file_path, pred_drop_cols, predictions_dir)
             except Exception as e:
                 logger.error(f"Error processing file {file_path}: {e}", exc_info=True)
         logger.info(f"Prediction process completed for variant {variant_name}.")
-    # --- GPU Memory Cleanup ---
     try:
-        # If cupy is available, free all blocks from the default memory pool.
         if cp is not None:
             cp.get_default_memory_pool().free_all_blocks()
             logger.info("GPU memory freed for variant " + variant_name)
     except Exception as e:
         logger.error("Error during GPU memory cleanup: " + str(e))
-    # --- End GPU Memory Cleanup ---
     return performance
 
 
@@ -320,19 +435,20 @@ def run_training_pipeline(model_name: str,
                           predictions_subdir: str,
                           metrics_filename: str):
     """
-    Run the training and prediction pipeline for a given model across all preprocessed variants.
-    This version processes each variant sequentially to avoid pickling issues.
+    Run the complete training and prediction pipeline for a given model across all preprocessed variants.
 
-    Parameters:
-      - model_name: e.g. "Random Forest", "Linear Regression", "XGBoost"
-      - pipeline_builder: Callable that accepts X_train and returns a Pipeline.
-      - search_class: Hyperparameter search class (e.g., GridSearchCV, HalvingGridSearchCV, or RandomizedSearchCV).
-      - param_grid: Hyperparameter grid.
-      - use_sample_weight: Whether to compute sample weights.
-      - model_filename: Filename prefix for saving the model.
-      - predictions_subdir: Subdirectory (under ../data/predictions) for predictions.
-      - metrics_filename: CSV filename for performance metrics.
-      - search_kwargs: Additional kwargs for the search class.
+    Args:
+        model_name (str): e.g., "Random Forest", "Linear Regression", "XGBoost".
+        pipeline_builder: Callable that accepts training data and returns a Pipeline.
+        search_class: Hyperparameter search class (e.g., GridSearchCV, HalvingGridSearchCV).
+        param_grid (Union[Dict, List[Dict]]): Hyperparameter grid.
+        use_sample_weight (bool): Whether to compute sample weights.
+        model_filename (str): Filename prefix for saving the trained model.
+        predictions_subdir (str): Subdirectory (under ../data/predictions) to save predictions.
+        metrics_filename (str): Filename for the CSV file with performance metrics.
+
+    Returns:
+        None. Performance metrics are saved to a CSV file.
     """
     all_records = []
     PREPROC_VARIANTS = {

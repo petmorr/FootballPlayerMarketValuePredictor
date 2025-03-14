@@ -1,8 +1,9 @@
 """
-Player Value Update Script
+player_value.py
 
 This module updates player market values by fetching data from an API,
-processing player names, merging data, and writing updated files.
+processing player names and market value histories, merging data,
+and writing updated files.
 """
 
 import functools
@@ -24,9 +25,9 @@ from rapidfuzz.fuzz import partial_ratio
 
 from logging_config import configure_logger
 
-# ------------------------------------------------------------------------------
+# =============================================================================
 # Global Configuration & Logging
-# ------------------------------------------------------------------------------
+# =============================================================================
 PREPROC_VARIANT_FOLDERS: Dict[str, Path] = {
     "enhanced_feature_engineering": Path("../data/cleaned/enhanced_feature_engineering"),
     "feature_engineering": Path("../data/cleaned/feature_engineering"),
@@ -37,6 +38,7 @@ UPDATED_VARIANT_FOLDERS: Dict[str, Path] = {
     "feature_engineering": Path("../data/updated/feature_engineering"),
     "no_feature_engineering": Path("../data/updated/no_feature_engineering")
 }
+# Ensure updated folders exist.
 for folder in UPDATED_VARIANT_FOLDERS.values():
     folder.mkdir(parents=True, exist_ok=True)
 
@@ -51,19 +53,32 @@ MAX_API_RETRIES: int = 3
 logger = configure_logger("player_value", "player_value.log")
 
 
-# ------------------------------------------------------------------------------
+# =============================================================================
 # File I/O Helpers
-# ------------------------------------------------------------------------------
+# =============================================================================
 def get_clean_basename(file_path: str) -> str:
     """
-    Extract a clean basename from a file path.
+    Extract a clean basename from a file path by removing extra extensions.
+
+    Args:
+        file_path (str): The path of the file.
+
+    Returns:
+        str: The base name without extra extensions.
     """
     p = Path(file_path)
     return p.name.split('.')[0] if len(p.suffixes) > 1 else p.stem
 
+
 def get_updated_filename_from_cleaned(filename: str) -> str:
     """
     Construct the updated filename from a cleaned file name.
+
+    Args:
+        filename (str): The original cleaned file name.
+
+    Returns:
+        str: The corresponding updated file name.
     """
     base = get_clean_basename(filename)
     suffix = Path(filename).suffix
@@ -71,9 +86,16 @@ def get_updated_filename_from_cleaned(filename: str) -> str:
         return f"updated_{base[len('cleaned_'):]}{suffix}"
     return f"updated_{base}{suffix}"
 
+
 def read_input_file(file_path: str) -> Optional[DataFrame]:
     """
-    Read an input file as a DataFrame if the file type is supported.
+    Read an input file as a DataFrame if supported.
+
+    Args:
+        file_path (str): The file path.
+
+    Returns:
+        Optional[DataFrame]: The DataFrame if read successfully; otherwise, None.
     """
     p = Path(file_path)
     if p.suffix.lower() == ".parquet":
@@ -81,9 +103,15 @@ def read_input_file(file_path: str) -> Optional[DataFrame]:
     logger.error(f"Unsupported file type: {file_path}")
     return None
 
+
 def write_output_file(df: pd.DataFrame, output_folder: Path, original_filename: str) -> None:
     """
-    Write the DataFrame to a Parquet file in the output folder.
+    Write the DataFrame to a Parquet file in the specified output folder.
+
+    Args:
+        df (pd.DataFrame): The DataFrame to write.
+        output_folder (Path): The target folder for output.
+        original_filename (str): The original filename to derive the updated name.
     """
     new_filename = get_updated_filename_from_cleaned(original_filename)
     output_path = output_folder / new_filename
@@ -92,12 +120,18 @@ def write_output_file(df: pd.DataFrame, output_folder: Path, original_filename: 
     logger.info(f"Updated dataset saved to: {output_path}")
 
 
-# ------------------------------------------------------------------------------
+# =============================================================================
 # Text & Date Utilities
-# ------------------------------------------------------------------------------
+# =============================================================================
 def fix_encoding(s: str) -> str:
     """
-    Fix text encoding issues.
+    Fix text encoding issues using ftfy.
+
+    Args:
+        s (str): The string to fix.
+
+    Returns:
+        str: The fixed string.
     """
     try:
         return ftfy.fix_text(s)
@@ -105,9 +139,16 @@ def fix_encoding(s: str) -> str:
         logger.error(f"Encoding fix failed for '{s}': {e}")
         return s
 
+
 def parse_date(date_str: Any) -> Optional[datetime]:
     """
     Parse a date string into a datetime object.
+
+    Args:
+        date_str (Any): The date string or datetime object.
+
+    Returns:
+        Optional[datetime]: Parsed datetime object or None if parsing fails.
     """
     if isinstance(date_str, datetime):
         return date_str
@@ -118,18 +159,31 @@ def parse_date(date_str: Any) -> Optional[datetime]:
         return None
 
 
-# ------------------------------------------------------------------------------
+# =============================================================================
 # Name Normalization Helpers
-# ------------------------------------------------------------------------------
+# =============================================================================
 def remove_diacritics(s: str) -> str:
     """
     Remove diacritics from a string.
+
+    Args:
+        s (str): The input string.
+
+    Returns:
+        str: The string without diacritics.
     """
     return ''.join(c for c in unicodedata.normalize('NFKD', s) if not unicodedata.combining(c))
+
 
 def normalize_name(name: str) -> str:
     """
     Normalize a player name by fixing encoding, removing diacritics, and stripping spaces.
+
+    Args:
+        name (str): The player's name.
+
+    Returns:
+        str: The normalized name in lower-case without punctuation.
     """
     try:
         name = fix_encoding(name).strip()
@@ -141,9 +195,16 @@ def normalize_name(name: str) -> str:
     name = re.sub(r"\s+", "", name)
     return name
 
+
 def normalize_name_keep_spaces(name: str) -> str:
     """
     Normalize a player name while preserving spaces.
+
+    Args:
+        name (str): The player's name.
+
+    Returns:
+        str: The normalized name in lower-case with single spaces.
     """
     try:
         name = fix_encoding(name).strip().lower()
@@ -153,20 +214,33 @@ def normalize_name_keep_spaces(name: str) -> str:
     name = re.sub(r"[^\w\s]", "", name)
     return re.sub(r"\s+", " ", name).strip()
 
+
 def get_last_name(full_name: str) -> str:
     """
     Extract the normalized last name from a full name.
+
+    Args:
+        full_name (str): The full name of the player.
+
+    Returns:
+        str: The normalized last name.
     """
     parts = full_name.split()
     return normalize_name(parts[-1]) if parts else ""
 
 
-# ------------------------------------------------------------------------------
+# =============================================================================
 # Candidate Query Generator
-# ------------------------------------------------------------------------------
+# =============================================================================
 def generate_candidate_queries(player_name: str) -> set:
     """
-    Generate multiple candidate queries from a player name for searching.
+    Generate a set of candidate queries from a player's name for fuzzy search.
+
+    Args:
+        player_name (str): The player's name.
+
+    Returns:
+        set: A set of candidate query strings.
     """
     fixed = fix_encoding(player_name).strip()
     variants = set()
@@ -216,14 +290,21 @@ def generate_candidate_queries(player_name: str) -> set:
     return variants
 
 
-# ------------------------------------------------------------------------------
+# =============================================================================
 # API Request Functions (with Caching)
-# ------------------------------------------------------------------------------
+# =============================================================================
 session = requests.Session()
 
 def make_request_with_retry(endpoint: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """
     Make an API GET request with retries.
+
+    Args:
+        endpoint (str): API endpoint.
+        params (Optional[Dict[str, Any]]): Query parameters.
+
+    Returns:
+        Dict[str, Any]: The JSON response as a dictionary.
     """
     url = f"{API_BASE_URL}/{endpoint}"
     for attempt in range(1, MAX_API_RETRIES + 1):
@@ -237,18 +318,32 @@ def make_request_with_retry(endpoint: str, params: Optional[Dict[str, Any]] = No
             time.sleep(min(2 ** attempt, 60))
     return {}
 
+
 def fetch_player_market_value(player_id: str) -> Optional[List[Dict[str, Any]]]:
     """
     Fetch the market value history for a player using their ID.
+
+    Args:
+        player_id (str): The player's ID.
+
+    Returns:
+        Optional[List[Dict[str, Any]]]: List of market value entries or None.
     """
     endpoint = f"players/{player_id}/market_value"
     logger.info(f"Fetching market value for player ID {player_id}.")
     return make_request_with_retry(endpoint).get("marketValueHistory", [])
 
+
 @functools.lru_cache(maxsize=1000)
 def fetch_player_profile(player_id: str) -> Optional[str]:
     """
     Fetch the player's profile URL using caching.
+
+    Args:
+        player_id (str): The player's ID.
+
+    Returns:
+        Optional[str]: The profile URL if available.
     """
     endpoint = f"players/{player_id}/profile"
     logger.info(f"Fetching profile URL for player ID {player_id}.")
@@ -256,12 +351,19 @@ def fetch_player_profile(player_id: str) -> Optional[str]:
     return data.get("url", None)
 
 
-# ------------------------------------------------------------------------------
+# =============================================================================
 # Name-Based Search Functions
-# ------------------------------------------------------------------------------
+# =============================================================================
 def fetch_player_id_by_last_name(player_name: str, team_name: str) -> Optional[str]:
     """
     Perform a fallback search by last name to obtain a player's ID.
+
+    Args:
+        player_name (str): The player's name.
+        team_name (str): The player's team name.
+
+    Returns:
+        Optional[str]: The player's ID if found; otherwise, None.
     """
     input_last = get_last_name(player_name)
     if not input_last:
@@ -286,10 +388,18 @@ def fetch_player_id_by_last_name(player_name: str, team_name: str) -> Optional[s
     logger.warning(f"Fallback search by last name for '{input_last}' found no suitable candidate.")
     return None
 
+
 @functools.lru_cache(maxsize=1000)
 def fetch_player_id(player_name: str, team_name: Optional[str] = None) -> Optional[str]:
     """
     Search for a player's ID using various query variants.
+
+    Args:
+        player_name (str): The player's name.
+        team_name (Optional[str]): The player's team name.
+
+    Returns:
+        Optional[str]: The found player's ID, or None if not found.
     """
     fixed_name = fix_encoding(player_name)
     for query in [fixed_name, re.sub(r"[^\w\s]", "", fixed_name)]:
@@ -366,33 +476,56 @@ def fetch_player_id(player_name: str, team_name: Optional[str] = None) -> Option
     return None
 
 
-# ------------------------------------------------------------------------------
+# =============================================================================
 # Transfermarkt URL Helper
-# ------------------------------------------------------------------------------
+# =============================================================================
 def slugify(value: str) -> str:
     """
     Create a URL-friendly slug from a string.
+
+    Args:
+        value (str): The string to slugify.
+
+    Returns:
+        str: The slugified string.
     """
     value = str(value)
     value = unicodedata.normalize('NFKD', value).encode('ascii', 'ignore').decode('ascii')
     value = re.sub(r'[^\w\s-]', '', value).strip().lower()
     return re.sub(r'[-\s]+', '-', value)
 
+
 def construct_transfermarkt_url(player_name: str, player_id: str) -> str:
     """
     Construct a Transfermarkt profile URL for a given player.
+
+    Args:
+        player_name (str): The player's name.
+        player_id (str): The player's ID.
+
+    Returns:
+        str: The constructed Transfermarkt URL.
     """
     tld = CONFIG.get("transfermarkt_tld", "com")
     return f"https://www.transfermarkt.{tld}/{slugify(player_name)}/profil/spieler/{player_id}"
 
 
-# ------------------------------------------------------------------------------
+# =============================================================================
 # Market Value Filtering & Validation
-# ------------------------------------------------------------------------------
-def filter_market_values_by_season(market_values: List[Dict[str, Any]], season_start: datetime, season_end: datetime) -> \
-List[Dict[str, Any]]:
+# =============================================================================
+def filter_market_values_by_season(market_values: List[Dict[str, Any]],
+                                   season_start: datetime,
+                                   season_end: datetime) -> List[Dict[str, Any]]:
     """
-    Filter market value entries by a season range.
+    Filter market value entries by a given season range.
+
+    Args:
+        market_values (List[Dict[str, Any]]): List of market value entries.
+        season_start (datetime): Start date of the season.
+        season_end (datetime): End date of the season.
+
+    Returns:
+        List[Dict[str, Any]]: Filtered list of market value entries.
     """
     filtered = []
     for entry in market_values:
@@ -402,10 +535,21 @@ List[Dict[str, Any]]:
     return filtered
 
 
-def validate_market_value(market_values: List[Dict[str, Any]], team_name: str, season_start: datetime,
+def validate_market_value(market_values: List[Dict[str, Any]],
+                          team_name: str,
+                          season_start: datetime,
                           season_end: datetime) -> Optional[Dict[str, Any]]:
     """
-    Validate and select the most appropriate market value entry based on team matching and date proximity.
+    Select the most appropriate market value entry based on team matching and date proximity.
+
+    Args:
+        market_values (List[Dict[str, Any]]): List of market value entries.
+        team_name (str): The team name for matching.
+        season_start (datetime): Season start date.
+        season_end (datetime): Season end date.
+
+    Returns:
+        Optional[Dict[str, Any]]: The validated market value entry if found; otherwise, None.
     """
     season_entries = filter_market_values_by_season(market_values, season_start, season_end)
     closest_entry, closest_date_diff = None, float("inf")
@@ -434,12 +578,19 @@ def validate_market_value(market_values: List[Dict[str, Any]], team_name: str, s
     return None
 
 
-# ------------------------------------------------------------------------------
-# Player Processing
-# ------------------------------------------------------------------------------
+# =============================================================================
+# Player Processing Functions
+# =============================================================================
 def process_player(player_name: str, team_name: str) -> Optional[List[Dict[str, Any]]]:
     """
-    Process a single player's market value data by fetching their ID and market value history.
+    Process a player's market value data by fetching their ID and market value history.
+
+    Args:
+        player_name (str): The player's name.
+        team_name (str): The player's team name.
+
+    Returns:
+        Optional[List[Dict[str, Any]]]: List of market value entries or None if not found.
     """
     fixed_name = fix_encoding(player_name)
     player_id = fetch_player_id(fixed_name, team_name)
@@ -452,9 +603,14 @@ def process_player(player_name: str, team_name: str) -> Optional[List[Dict[str, 
         return None
     return market_values
 
+
 def process_player_values(file_path: str, season_end_year: int) -> None:
     """
     Process all players in the given file for a specific season by updating their Market Value.
+
+    Args:
+        file_path (str): Path to the input file.
+        season_end_year (int): The ending year of the season.
     """
     df = read_input_file(file_path)
     if df is None:
@@ -494,9 +650,14 @@ def process_player_values(file_path: str, season_end_year: int) -> None:
 
     write_output_file(df, TEMP_UPDATED_FOLDER, file_path)
 
+
 def copy_market_value(source_file: Path, target_file: Path) -> None:
     """
     Merge the 'Market Value' column from the source file into the target file based on normalized 'player'.
+
+    Args:
+        source_file (Path): Path to the source file.
+        target_file (Path): Path to the target file.
     """
     df_source = pd.read_parquet(source_file)
     df_target = pd.read_parquet(target_file)
@@ -512,15 +673,15 @@ def copy_market_value(source_file: Path, target_file: Path) -> None:
     logger.info(f"Market Value merged into file: {target_file}")
 
 
-# ------------------------------------------------------------------------------
+# =============================================================================
 # Main Execution Function
-# ------------------------------------------------------------------------------
+# =============================================================================
 def main() -> None:
     """
     Process player market value updates for each feature engineering variant.
 
-    For the enhanced variant, update via API calls and copy to the updated folder.
-    For basic and no_feature_engineering variants, copy and merge Market Value from the enhanced file.
+    For the enhanced variant, update via API calls and then copy the updated file to the enhanced folder.
+    For basic and no_feature_engineering variants, merge Market Value from the enhanced file.
     Finally, remove the temporary folder.
     """
     # Process enhanced variant.
@@ -582,6 +743,7 @@ def main() -> None:
         logger.info("Temporary updated folder removed.")
     except Exception as e:
         logger.error(f"Error cleaning up temporary folder: {e}")
+
 
 if __name__ == "__main__":
     main()

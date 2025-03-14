@@ -1,10 +1,12 @@
 """
+xgboost_model.py
+
 Full Pipeline for Training and Predicting Player Transfer Prices using XGBoost.
 
-This script uses XGBoost's XGBRegressorGPU (imported from model_utils) with an expanded comprehensive
+This script uses a GPU-accelerated XGBoost regressor (XGBRegressorGPU) with an extensive
 hyperparameter grid and HalvingGridSearchCV to train and evaluate the model on three preprocessed variants.
 GPU acceleration is enabled by setting tree_method='hist' and device='cuda'.
-Performance metrics are saved to a CSV.
+Performance metrics are saved to a CSV file.
 """
 
 import numpy as np
@@ -17,18 +19,24 @@ from model_utils import run_training_pipeline, build_preprocessor, XGBRegressorG
 
 def xgb_pipeline_builder(X_train) -> Pipeline:
     """
-    Build the pipeline for XGBoost.
+    Build a scikit-learn pipeline for XGBoost regression with GPU acceleration.
 
-    Uses the common preprocessor and wraps our XGBRegressorGPU (defined in model_utils)
-    in a TransformedTargetRegressor to apply a log1p transform to the target variable.
+    This function constructs a pipeline that preprocesses the training data and applies
+    an XGBoost regressor wrapped in a TransformedTargetRegressor (using log1p transform on target).
 
-    GPU acceleration is enabled by setting tree_method='hist' and device='cuda'.
+    Args:
+        X_train: The training features used to fit the preprocessor.
+
+    Returns:
+        Pipeline: The constructed pipeline.
     """
     preprocessor = build_preprocessor(X_train)
     xgb_gpu = XGBRegressorGPU(random_state=42, tree_method='hist', device='cuda', verbosity=1, n_jobs=-1)
     regressor = TransformedTargetRegressor(regressor=xgb_gpu, func=np.log1p, inverse_func=np.expm1)
     return Pipeline(steps=[("preprocessor", preprocessor), ("regressor", regressor)])
 
+
+# Define hyperparameter grid for XGBoost.
 xgb_param_grid = {
     "regressor__regressor__n_estimators": [100, 300, 500],
     "regressor__regressor__max_depth": [3, 7, 15],

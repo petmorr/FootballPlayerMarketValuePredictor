@@ -12,17 +12,17 @@ from flask import Flask, render_template, request, redirect, url_for, flash
 from logging_config import configure_logger
 
 
-# ------------------------------------------------------------------------------
+# =============================================================================
 # Module Setup
-# ------------------------------------------------------------------------------
+# =============================================================================
 def ensure_module(module_name: str, package_name: str = None) -> None:
     """
-    Ensure that the specified module is installed. If missing, install it via pip.
+    Ensure that the specified module is installed. If not, install it using pip.
 
     Args:
-        module_name (str): Name of the module to check.
-        package_name (str, optional): Name of the package to install if different.
-                                    Defaults to None.
+        module_name (str): The name of the module to check.
+        package_name (str, optional): The package name to install if different from module_name.
+                                      Defaults to None.
     """
     try:
         __import__(module_name)
@@ -34,23 +34,23 @@ def ensure_module(module_name: str, package_name: str = None) -> None:
 
 ensure_module("bs4", "beautifulsoup4")
 
-# ------------------------------------------------------------------------------
-# Application Setup
-# ------------------------------------------------------------------------------
+# =============================================================================
+# Application Initialization
+# =============================================================================
 logger = configure_logger("web_portal", "web_portal.log")
 app = Flask(__name__)
 app.secret_key = "replace_with_your_secret_key"
 
 
-# ------------------------------------------------------------------------------
-# API Server Functions
-# ------------------------------------------------------------------------------
+# =============================================================================
+# API Server Utilities
+# =============================================================================
 def check_api_running() -> bool:
     """
-    Check if the local API server is running.
+    Check if the local API server is running by sending a GET request.
 
     Returns:
-        bool: True if API responds with status code 200, otherwise False.
+        bool: True if the API server responds with HTTP status 200, else False.
     """
     try:
         response = requests.get("http://localhost:8000", timeout=3)
@@ -63,11 +63,11 @@ def start_local_api() -> bool:
     """
     Start the local API server if it is not already running.
 
-    This function clones the repository if needed, installs dependencies using Poetry,
-    and starts the API server. It then verifies that the server is running.
+    This function clones the API repository if needed, installs dependencies using Poetry,
+    and starts the API server. It then verifies the server is running.
 
     Returns:
-        bool: True if the API server is running, otherwise False.
+        bool: True if the API server starts successfully, else False.
     """
     if check_api_running():
         logger.info("API server already running. Skipping startup.")
@@ -111,7 +111,7 @@ def start_local_api() -> bool:
 @app.before_request
 def run_preprocessing_once() -> None:
     """
-    Flask hook to ensure the local API server starts only once.
+    Flask hook to ensure the API server is started only once before handling requests.
     """
     if not app.config.get("PREPROCESSING_DONE"):
         if not start_local_api():
@@ -125,11 +125,11 @@ def run_command(command: list) -> bool:
     """
     Execute a system command.
 
-    If the command starts with 'python', it will run using the current interpreter
-    with its working directory set to the script's parent folder.
+    If the command begins with 'python', it will run with the current interpreter and
+    set the working directory to the script's parent folder.
 
     Args:
-        command (list): Command and its arguments as a list.
+        command (list): The command and its arguments as a list.
 
     Returns:
         bool: True if the command executes successfully, otherwise False.
@@ -152,59 +152,224 @@ def run_command(command: list) -> bool:
         return False
 
 
-# ------------------------------------------------------------------------------
+# =============================================================================
+# Helper Functions for Data Processing and Logging
+# =============================================================================
+def get_clean_basename(file_path: str) -> str:
+    """
+    Extract a clean basename from a file path by removing extra extensions.
+
+    Args:
+        file_path (str): The file path.
+
+    Returns:
+        str: The cleaned basename.
+    """
+    p = Path(file_path)
+    return p.name.split('.')[0] if len(p.suffixes) > 1 else p.stem
+
+
+def read_log_file(file_path: Path) -> str:
+    """
+    Read a log file using UTF-8 encoding, with a fallback to latin1 if necessary.
+
+    Args:
+        file_path (Path): The path to the log file.
+
+    Returns:
+        str: The contents of the log file or an error message.
+    """
+    if not file_path.exists():
+        return "Log file not found."
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            return f.read()
+    except UnicodeDecodeError:
+        logger.error(f"UTF-8 decoding failed for {file_path}, trying fallback encoding.")
+        try:
+            with open(file_path, "r", encoding="latin1") as f:
+                return f.read()
+        except Exception as e:
+            return f"Error reading log file: {e}"
+    except Exception as e:
+        return f"Error reading log file: {e}"
+
+
+def load_missing_transfer_values() -> list:
+    """
+    Recursively load entries with missing transfer values from all subdirectories in data/updated.
+
+    Returns:
+        list: A list of dictionaries detailing missing transfer value entries.
+    """
+    missing_entries = []
+    updated_dir = Path("data/updated")
+    for file in updated_dir.rglob("updated_*.parquet"):
+        try:
+            df = pd.read_parquet(file)
+        except Exception as e:
+            logger.error(f"Error reading {file}: {e}")
+            continue
+
+        # Normalize column names
+        df.columns = [c.lower() for c in df.columns]
+
+        # Determine the market value column
+        if "market value" in df.columns:
+            mv_col = "market value"
+        elif "market_value" in df.columns:
+            mv_col = "market_value"
+        else:
+            candidate_cols = [c for c in df.columns if "market" in c and "value" in c]
+            if candidate_cols:
+                mv_col = candidate_cols[0]
+            else:
+                logger.warning(f"No market value column found in {file.name}; skipping.")
+                continue
+
+        logger.info(f"Unique values in '{mv_col}' for {file.name}: {df[mv_col].unique()}")
+
+        def is_missing(val):
+            """
+            Determine if a given market value is considered missing.
+
+            Args:
+                val: The value to evaluate.
+
+            Returns:
+                bool: True if the value is missing, else False.
+            """
+            if pd.isna(val):
+                return True
+            if isinstance(val, str):
+                return val.strip().lower() in ["", "n/a", "na", "null", "none", "nan", "-"]
+            return False
+
+        missing_df = df[df[mv_col].apply(is_missing)]
+        logger.info(f"Found {missing_df.shape[0]} missing market value entries in {file.name}")
+
+        # Extract metadata from the filename and subdirectory
+        base_name = file.stem  # e.g. updated_Premier-League_2022-2023
+        parts = base_name.split("_")
+        league = parts[1] if len(parts) >= 3 else "Unknown"
+        season = parts[2] if len(parts) >= 3 else "Unknown"
+        fe_variant = file.parent.name  # Feature engineering variant (subdirectory)
+
+        for _, row in missing_df.iterrows():
+            entry = {
+                "dataset": f"{league}_{season}_{fe_variant}",
+                "season": season,
+                "player": row.get("player", "Unknown"),
+                "team": row.get("squad", "Unknown"),
+                "closest_date": row.get("closest_date", "N/A"),
+                "current_value": row.get(mv_col, "N/A")
+            }
+            missing_entries.append(entry)
+    return missing_entries
+
+
+def group_missing_entries(missing_entries: list) -> dict:
+    """
+    Group missing transfer value entries by dataset identifier.
+
+    Args:
+        missing_entries (list): A list of missing transfer value entry dictionaries.
+
+    Returns:
+        dict: A dictionary keyed by dataset identifier with corresponding entry lists.
+    """
+    grouped = {}
+    for entry in missing_entries:
+        ds = entry["dataset"]
+        grouped.setdefault(ds, []).append(entry)
+    return grouped
+
+
+def update_transfer_value_in_parquet(dataset: str, season: str, updates: list) -> bool:
+    """
+    Update the market value for specified entries in a parquet file.
+
+    Args:
+        dataset (str): The dataset identifier.
+        season (str): The season identifier.
+        updates (list): A list of update dictionaries with new transfer values.
+
+    Returns:
+        bool: True if the update is successful, otherwise False.
+    """
+    updated_dir = Path("data/updated")
+    filename = f"updated_{dataset}.parquet"
+    file_path = updated_dir / filename
+    if not file_path.exists():
+        logger.error(f"File {file_path} not found for updating transfer value.")
+        return False
+    try:
+        df = pd.read_parquet(file_path)
+    except Exception as e:
+        logger.error(f"Error reading {file_path}: {e}")
+        return False
+
+    df.columns = [col.lower() for col in df.columns]
+    for upd in updates:
+        player = upd["player"]
+        team = upd["team"]
+        new_value = upd["manual_transfer_value"]
+        mask = (df["player"].str.lower() == player.lower()) & (df["squad"].str.lower() == team.lower())
+        if mask.sum() == 0:
+            logger.warning(f"No matching row found for {player} in {team} in {file_path}.")
+            continue
+        df.loc[mask, "market value"] = new_value
+        logger.info(f"Updated {player} ({team}) in {dataset} with value {new_value}.")
+    try:
+        df.to_parquet(file_path, index=False)
+    except Exception as e:
+        logger.error(f"Error writing {file_path}: {e}")
+        return False
+    return True
+
+
+# =============================================================================
 # Route Handlers
-# ------------------------------------------------------------------------------
+# =============================================================================
 @app.route("/")
-def index():
+def index() -> str:
     """
     Render the home page.
+
+    Returns:
+        str: Rendered HTML for the home page.
     """
     return render_template("index.html", title="Home")
 
 
 @app.route("/logs")
-def view_logs():
+def view_logs() -> str:
     """
-    Render the logs page by reading various log files.
+    Render the logs page by reading and displaying various log files.
 
     Returns:
-        Rendered HTML for the logs page.
+        str: Rendered HTML for the logs page.
     """
+    base_dir = Path(__file__).parent
     log_files = {
-        "Web Portal": Path("logging/web_portal.log"),
-        "Web Scrape": Path("preprocessing/logging/web_scrape.log"),
-        "Preprocessing": Path("preprocessing/logging/preprocessing.log"),
-        "Player Value": Path("preprocessing/logging/player_value.log"),
-        "Models": Path("models/logging/model_utils.log"),
+        "Web Portal": base_dir / "logging" / "web_portal.log",
+        "Web Scrape": base_dir / "preprocessing" / "logging" / "web_scrape.log",
+        "Preprocessing": base_dir / "preprocessing" / "logging" / "preprocessing.log",
+        "Player Value": base_dir / "preprocessing" / "logging" / "player_value.log",
+        "Models": base_dir / "models" / "logging" / "model_utils.log",
     }
-    logs_content = {}
-    for log_name, file_path in log_files.items():
-        if file_path.exists():
-            try:
-                with open(file_path, "r", encoding="utf-8") as f:
-                    logs_content[log_name] = f.read()
-            except UnicodeDecodeError:
-                logger.error(f"UTF-8 decoding failed for {file_path}, trying fallback encoding.")
-                try:
-                    with open(file_path, "r", encoding="latin1") as f:
-                        logs_content[log_name] = f.read()
-                except Exception as e2:
-                    logs_content[log_name] = f"Error reading log file: {e2}"
-            except Exception as e:
-                logs_content[log_name] = f"Error reading log file: {e}"
-        else:
-            logs_content[log_name] = "Log file not found."
+    logs_content = {name: read_log_file(path) for name, path in log_files.items()}
     return render_template("logs.html", logs=logs_content)
 
 
 @app.route("/model_preprocessing", methods=["GET", "POST"])
-def model_preprocessing():
+def model_preprocessing() -> str:
     """
-    Handle model preprocessing.
+    Handle model preprocessing by running web scraping, data preprocessing, and player value updates.
+    On POST, executes the preprocessing pipeline; on GET, renders the preprocessing page.
 
-    On POST: runs web scraping, data preprocessing, and player value update scripts.
-    On GET: renders the preprocessing page.
+    Returns:
+        str: Rendered HTML for the preprocessing page or a redirect response.
     """
     if request.method == "POST":
         if not check_api_running():
@@ -233,162 +398,14 @@ def model_preprocessing():
     return render_template("model_preprocessing.html", title="Model Preprocessing")
 
 
-# ------------------------------------------------------------------------------
-# Helper Functions for Data Processing
-# ------------------------------------------------------------------------------
-def get_clean_basename(file_path: str) -> str:
-    """
-    Extract a clean basename from a file path by removing extra extensions.
-
-    Args:
-        file_path (str): The file path.
-
-    Returns:
-        str: Clean basename.
-    """
-    p = Path(file_path)
-    return p.name.split('.')[0] if len(p.suffixes) > 1 else p.stem
-
-
-def load_missing_transfer_values() -> list:
-    """
-    Load entries with missing transfer values from all subdirectories in data/updated.
-
-    Returns:
-        list: List of dictionaries with details of missing entries.
-    """
-    missing_entries = []
-    updated_dir = Path("data/updated")
-    # Recursively search for all .parquet files in subdirectories
-    for file in updated_dir.rglob("updated_*.parquet"):
-        try:
-            df = pd.read_parquet(file)
-        except Exception as e:
-            logger.error(f"Error reading {file}: {e}")
-            continue
-
-        # Normalize column names
-        df.columns = [c.lower() for c in df.columns]
-
-        # Determine the market value column
-        if "market value" in df.columns:
-            mv_col = "market value"
-        elif "market_value" in df.columns:
-            mv_col = "market_value"
-        else:
-            candidate_cols = [c for c in df.columns if "market" in c and "value" in c]
-            if candidate_cols:
-                mv_col = candidate_cols[0]
-            else:
-                logger.warning(f"No market value column found in {file.name}; skipping.")
-                continue
-
-        # Log unique values for debugging purposes
-        unique_vals = df[mv_col].unique()
-        logger.info(f"Unique values in '{mv_col}' for {file.name}: {unique_vals}")
-
-        # Helper to determine if a value is missing
-        def is_missing(val):
-            if pd.isna(val):
-                return True
-            if isinstance(val, str):
-                return val.strip().lower() in ["", "n/a", "na", "null", "none", "nan", "-"]
-            return False
-
-        missing_df = df[df[mv_col].apply(is_missing)]
-        logger.info(f"Found {missing_df.shape[0]} missing market value entries in {file.name}")
-
-        # Extract league and season from the filename; e.g. updated_Premier-League_2022-2023
-        base_name = file.stem  # gets "updated_Premier-League_2022-2023"
-        parts = base_name.split("_")
-        league = parts[1] if len(parts) >= 3 else "Unknown"
-        season = parts[2] if len(parts) >= 3 else "Unknown"
-
-        # Optionally, include the feature engineering variant (i.e. subdirectory name)
-        fe_variant = file.parent.name  # e.g. enhanced_feature_engineering
-
-        for _, row in missing_df.iterrows():
-            entry = {
-                "dataset": f"{league}_{season}_{fe_variant}",
-                "season": season,
-                "player": row.get("player", "Unknown"),
-                "team": row.get("squad", "Unknown"),
-                "closest_date": row.get("closest_date", "N/A"),
-                "current_value": row.get(mv_col, "N/A")
-            }
-            missing_entries.append(entry)
-    return missing_entries
-
-
-def group_missing_entries(missing_entries: list) -> dict:
-    """
-    Group missing entries by dataset.
-
-    Args:
-        missing_entries (list): List of missing transfer value entries.
-
-    Returns:
-        dict: Grouped entries keyed by dataset.
-    """
-    grouped = {}
-    for entry in missing_entries:
-        ds = entry["dataset"]
-        grouped.setdefault(ds, []).append(entry)
-    return grouped
-
-
-def update_transfer_value_in_parquet(dataset: str, season: str, updates: list) -> bool:
-    """
-    Update transfer values in a parquet file for a given dataset.
-
-    Args:
-        dataset (str): Dataset identifier.
-        season (str): Season identifier.
-        updates (list): List of update dictionaries.
-
-    Returns:
-        bool: True if updates were successful, otherwise False.
-    """
-    updated_dir = Path("data/updated")
-    filename = f"updated_{dataset}.parquet"
-    file_path = updated_dir / filename
-    if not file_path.exists():
-        logger.error(f"File {file_path} not found for updating transfer value.")
-        return False
-    try:
-        df = pd.read_parquet(file_path)
-    except Exception as e:
-        logger.error(f"Error reading {file_path}: {e}")
-        return False
-    df.columns = [col.lower() for col in df.columns]
-    for upd in updates:
-        player = upd["player"]
-        team = upd["team"]
-        new_value = upd["manual_transfer_value"]
-        mask = (df["player"].str.lower() == player.lower()) & (df["squad"].str.lower() == team.lower())
-        if mask.sum() == 0:
-            logger.warning(f"No matching row found for {player} in {team} in {file_path}.")
-            continue
-        df.loc[mask, "market value"] = new_value
-        logger.info(f"Updated {player} ({team}) in {dataset} with value {new_value}.")
-    try:
-        df.to_parquet(file_path, index=False)
-    except Exception as e:
-        logger.error(f"Error writing {file_path}: {e}")
-        return False
-    return True
-
-
-# ------------------------------------------------------------------------------
-# Additional Route Handlers
-# ------------------------------------------------------------------------------
 @app.route("/manual_input", methods=["GET", "POST"])
-def manual_input():
+def manual_input() -> str:
     """
     Handle manual input for missing transfer values.
+    On POST, processes submitted updates; on GET, displays the missing entries for user input.
 
-    On POST: process submitted manual updates.
-    On GET: display missing entries for user input.
+    Returns:
+        str: Rendered HTML for the manual input page or a redirect response.
     """
     if request.method == "POST":
         players = request.form.getlist("player")
@@ -427,11 +444,13 @@ def manual_input():
 
 
 @app.route("/model_creation", methods=["GET", "POST"])
-def model_creation():
+def model_creation() -> str:
     """
-    Handle model creation requests.
+    Handle model creation requests by executing the selected model training script.
+    On POST, runs the model creation process; on GET, renders the model creation page.
 
-    On POST: run the selected model training script.
+    Returns:
+        str: Rendered HTML for the model creation page or a redirect response.
     """
     if request.method == "POST":
         model_choice = request.form.get("model_choice")
@@ -465,14 +484,14 @@ def model_creation():
 
 def safe_relative_path(file_path: Path, base: Path) -> str:
     """
-    Return the relative path of file_path with respect to base, if possible.
+    Compute the relative path of file_path with respect to base.
 
     Args:
         file_path (Path): The file path.
         base (Path): The base directory.
 
     Returns:
-        str: Relative path or absolute path if relative conversion fails.
+        str: The relative path if possible, otherwise the absolute path.
     """
     try:
         return str(file_path.relative_to(base))
@@ -482,14 +501,15 @@ def safe_relative_path(file_path: Path, base: Path) -> str:
 
 def parse_predicted_file_details(file_path: Path, base: Path) -> dict:
     """
-    Parse details from a predicted file's path.
+    Extract details from a predicted file's path including model name, feature variant,
+    league/season, and generate a relative link.
 
     Args:
         file_path (Path): The predicted file path.
         base (Path): The base directory for relative paths.
 
     Returns:
-        dict: Dictionary containing model name, feature variant, league/season, and file link.
+        dict: A dictionary containing model_name, fe_variant, league_season, and link.
     """
     parts = file_path.parts
     model_name = "Unknown Model"
@@ -500,7 +520,6 @@ def parse_predicted_file_details(file_path: Path, base: Path) -> dict:
     elif "xgboost" in parts:
         model_name = "XGBoost"
     fe_variant = "Unknown"
-    # Include xgboost in the check so we capture the feature engineering variant if present
     for i, p in enumerate(parts):
         if p in ("linear_regression", "random_forest", "xgboost") and i + 1 < len(parts):
             fe_variant = parts[i + 1]
@@ -516,10 +535,15 @@ def parse_predicted_file_details(file_path: Path, base: Path) -> dict:
 
 
 @app.route("/model_evaluation", methods=["GET", "POST"])
-def model_evaluation():
+def model_evaluation() -> str:
     """
-    Display performance metrics and predictions; support searching within prediction data.
+    Display model performance metrics and prediction file links.
+    Supports searching within prediction data based on user input.
+
+    Returns:
+        str: Rendered HTML for the model evaluation page.
     """
+    # Read performance metrics from CSV files
     lr_metrics_file = Path("models/results/performance_metrics_linear_regression.csv")
     rf_metrics_file = Path("models/results/performance_metrics_random_forest.csv")
     xgboost_metrics_file = Path("models/results/performance_metrics_xgboost.csv")
@@ -552,41 +576,31 @@ def model_evaluation():
     else:
         metrics["XGBoost"] = "Metrics file not found."
 
+    # Build predictions dictionary from predicted file details
     predictions = {"Linear Regression": {}, "Random Forest": {}, "XGBoost": {}}
 
     def insert_into_tree(details: dict) -> None:
         """
         Insert predicted file details into the predictions dictionary.
+
+        Args:
+            details (dict): A dictionary containing file details.
         """
         m = details["model_name"]
         fe = details["fe_variant"]
         ls = details["league_season"]
         link = details["link"]
-        if m not in predictions:
-            predictions[m] = {}
-        if fe not in predictions[m]:
-            predictions[m][fe] = {}
-        predictions[m][fe][ls] = link
+        predictions.setdefault(m, {}).setdefault(fe, {})[ls] = link
 
     base = Path.cwd()
-    lr_pred_dir = Path("data/predictions/linear_regression")
-    rf_pred_dir = Path("data/predictions/random_forest")
-    xgboost_pred_dir = Path("data/predictions/xgboost")
-    if lr_pred_dir.exists():
-        for f in lr_pred_dir.rglob("*"):
-            if f.is_file():
-                info = parse_predicted_file_details(f, base)
-                insert_into_tree(info)
-    if rf_pred_dir.exists():
-        for f in rf_pred_dir.rglob("*"):
-            if f.is_file():
-                info = parse_predicted_file_details(f, base)
-                insert_into_tree(info)
-    if xgboost_pred_dir.exists():
-        for f in xgboost_pred_dir.rglob("*"):
-            if f.is_file():
-                info = parse_predicted_file_details(f, base)
-                insert_into_tree(info)
+    for pred_dir in [Path("data/predictions/linear_regression"),
+                     Path("data/predictions/random_forest"),
+                     Path("data/predictions/xgboost")]:
+        if pred_dir.exists():
+            for f in pred_dir.rglob("*"):
+                if f.is_file():
+                    info = parse_predicted_file_details(f, base)
+                    insert_into_tree(info)
 
     search_results = None
     search_params = {}
@@ -614,7 +628,6 @@ def model_evaluation():
             elif selected_model == "Random Forest":
                 file_path = Path(
                     "data/predictions/random_forest") / selected_fe / f"predicted_updated_{selected_league}_{selected_season}.parquet"
-            # Adjust condition to cover both naming formats for XGBoost
             elif selected_model in ("XGBoost", "XG Boost"):
                 file_path = Path(
                     "data/predictions/xgboost") / selected_fe / f"predicted_updated_{selected_league}_{selected_season}.parquet"
@@ -651,10 +664,13 @@ def model_evaluation():
 
 
 @app.route("/run_all", methods=["GET", "POST"])
-def run_all():
+def run_all() -> str:
     """
-    Execute the full pipeline: web scraping, preprocessing, player value update,
+    Execute the complete pipeline: web scraping, data preprocessing, player value update,
     and model training.
+
+    Returns:
+        str: Rendered HTML for the full pipeline page or a redirect response.
     """
     if request.method == "POST":
         steps = [
@@ -676,9 +692,9 @@ def run_all():
     return render_template("run_all.html", title="Run Full Pipeline")
 
 
-# ------------------------------------------------------------------------------
+# =============================================================================
 # Main Execution
-# ------------------------------------------------------------------------------
+# =============================================================================
 if __name__ == "__main__":
     if not start_local_api():
         logger.error("Failed to start local API server. Some functionality may be unavailable.")

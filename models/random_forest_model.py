@@ -1,8 +1,10 @@
 """
+random_forest_model.py
+
 Full Pipeline for Training and Predicting Player Transfer Prices using Random Forest.
 
 This script uses HalvingGridSearchCV to train and evaluate a Random Forest model on three
-preprocessed variants. Performance metrics are saved to a CSV.
+preprocessed dataset variants. Performance metrics are saved to a CSV file.
 """
 
 import numpy as np
@@ -15,13 +17,25 @@ from model_utils import run_training_pipeline, build_preprocessor
 
 
 def rf_pipeline_builder(X_train) -> Pipeline:
-    """Builds the pipeline for Random Forest."""
+    """
+    Build a scikit-learn pipeline for Random Forest regression.
+
+    This function creates a pipeline that preprocesses the training data and then fits a Random
+    Forest regressor wrapped in a TransformedTargetRegressor to apply a log1p transform to the target.
+
+    Args:
+        X_train: The training features used to fit the preprocessor.
+
+    Returns:
+        Pipeline: A pipeline with preprocessing and Random Forest regression steps.
+    """
     preprocessor = build_preprocessor(X_train)
     rf = RandomForestRegressor(random_state=42, n_jobs=-1)
     regressor = TransformedTargetRegressor(regressor=rf, func=np.log1p, inverse_func=np.expm1)
     return Pipeline(steps=[("preprocessor", preprocessor), ("regressor", regressor)])
 
 
+# Define hyperparameter grid for Random Forest.
 rf_param_grid = [
     {
         "regressor__regressor__bootstrap": [True],
