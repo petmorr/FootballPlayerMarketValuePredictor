@@ -120,20 +120,27 @@
 
     <!-- Predicted Price Files Section -->
     <h3>Predicted Price Files</h3>
-    {% for model_name, files in predictions.items() %}
+    {% for model_name, fe_variants in predictions.items() %}
     <div class="card mb-4">
         <div class="card-header">
             <strong>{{ model_name }} Predictions</strong>
         </div>
         <div class="card-body">
-            {% if files %}
-            <ul class="list-group">
-                {% for f in files %}
+            {% if fe_variants %}
+            {% for fe_variant, league_dict in fe_variants.items() %}
+            <h5>{{ fe_variant }}</h5>
+            {% if league_dict %}
+            <ul class="list-group mb-3">
+                {% for league_season, link in league_dict.items() %}
                 <li class="list-group-item">
-                    <a href="{{ url_for('static', filename=f) }}">{{ f }}</a>
+                    <a href="{{ url_for('static', filename=link) }}">{{ league_season }}</a>
                 </li>
                 {% endfor %}
             </ul>
+            {% else %}
+            <p>No predictions for this variant.</p>
+            {% endif %}
+            {% endfor %}
             {% else %}
             <p>No prediction files found.</p>
             {% endif %}

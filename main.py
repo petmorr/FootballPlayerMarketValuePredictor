@@ -172,12 +172,11 @@ def view_logs():
         Rendered HTML for the logs page.
     """
     log_files = {
-        "Web Portal": Path("web_portal.log"),
-        "Preprocessing": Path("preprocessing/preprocessing.log"),
-        "Web Scrape": Path("preprocessing/web_scrape.log"),
-        "Player Value": Path("preprocessing/player_value.log"),
-        "Linear Regression": Path("models/linear_regression_model.log"),
-        "Random Forest": Path("models/random_forest_model.log"),
+        "Web Portal": Path("logging/web_portal.log"),
+        "Web Scrape": Path("preprocessing/logging/web_scrape.log"),
+        "Preprocessing": Path("preprocessing/logging/preprocessing.log"),
+        "Player Value": Path("preprocessing/logging/player_value.log"),
+        "Models": Path("models/logging/model_utils.log"),
     }
     logs_content = {}
     for log_name, file_path in log_files.items():
@@ -253,41 +252,69 @@ def get_clean_basename(file_path: str) -> str:
 
 def load_missing_transfer_values() -> list:
     """
-    Load entries with missing transfer values from updated data files.
+    Load entries with missing transfer values from all subdirectories in data/updated.
 
     Returns:
         list: List of dictionaries with details of missing entries.
     """
     missing_entries = []
     updated_dir = Path("data/updated")
-    for file in updated_dir.glob("updated_*"):
-        base_name = get_clean_basename(file.name)
-        parts = base_name.split("_")
-        league = parts[1] if len(parts) >= 3 else "Unknown"
-        season = parts[2] if len(parts) >= 3 else "Unknown"
+    # Recursively search for all .parquet files in subdirectories
+    for file in updated_dir.rglob("updated_*.parquet"):
         try:
-            if file.suffix == ".parquet":
-                df = pd.read_parquet(file)
-            elif file.name.endswith(".csv.gz"):
-                df = pd.read_csv(file, compression="gzip", encoding="utf-8")
-            else:
-                continue
+            df = pd.read_parquet(file)
         except Exception as e:
             logger.error(f"Error reading {file}: {e}")
             continue
+
+        # Normalize column names
         df.columns = [c.lower() for c in df.columns]
-        if "market value" not in df.columns:
-            logger.warning(f"'market value' column not found in {file.name}; skipping.")
-            continue
-        missing_df = df[df["market value"].isna()]
+
+        # Determine the market value column
+        if "market value" in df.columns:
+            mv_col = "market value"
+        elif "market_value" in df.columns:
+            mv_col = "market_value"
+        else:
+            candidate_cols = [c for c in df.columns if "market" in c and "value" in c]
+            if candidate_cols:
+                mv_col = candidate_cols[0]
+            else:
+                logger.warning(f"No market value column found in {file.name}; skipping.")
+                continue
+
+        # Log unique values for debugging purposes
+        unique_vals = df[mv_col].unique()
+        logger.info(f"Unique values in '{mv_col}' for {file.name}: {unique_vals}")
+
+        # Helper to determine if a value is missing
+        def is_missing(val):
+            if pd.isna(val):
+                return True
+            if isinstance(val, str):
+                return val.strip().lower() in ["", "n/a", "na", "null", "none", "nan", "-"]
+            return False
+
+        missing_df = df[df[mv_col].apply(is_missing)]
+        logger.info(f"Found {missing_df.shape[0]} missing market value entries in {file.name}")
+
+        # Extract league and season from the filename; e.g. updated_Premier-League_2022-2023
+        base_name = file.stem  # gets "updated_Premier-League_2022-2023"
+        parts = base_name.split("_")
+        league = parts[1] if len(parts) >= 3 else "Unknown"
+        season = parts[2] if len(parts) >= 3 else "Unknown"
+
+        # Optionally, include the feature engineering variant (i.e. subdirectory name)
+        fe_variant = file.parent.name  # e.g. enhanced_feature_engineering
+
         for _, row in missing_df.iterrows():
             entry = {
-                "dataset": f"{league}_{season}",
+                "dataset": f"{league}_{season}_{fe_variant}",
                 "season": season,
                 "player": row.get("player", "Unknown"),
                 "team": row.get("squad", "Unknown"),
                 "closest_date": row.get("closest_date", "N/A"),
-                "current_value": row.get("market value", "N/A")
+                "current_value": row.get(mv_col, "N/A")
             }
             missing_entries.append(entry)
     return missing_entries
@@ -473,8 +500,9 @@ def parse_predicted_file_details(file_path: Path, base: Path) -> dict:
     elif "xgboost" in parts:
         model_name = "XGBoost"
     fe_variant = "Unknown"
+    # Include xgboost in the check so we capture the feature engineering variant if present
     for i, p in enumerate(parts):
-        if p in ("linear_regression", "random_forest") and i + 1 < len(parts):
+        if p in ("linear_regression", "random_forest", "xgboost") and i + 1 < len(parts):
             fe_variant = parts[i + 1]
             break
     filename = file_path.name
@@ -560,7 +588,6 @@ def model_evaluation():
                 info = parse_predicted_file_details(f, base)
                 insert_into_tree(info)
 
-
     search_results = None
     search_params = {}
     if request.method == "POST" and "search_term" in request.form:
@@ -587,9 +614,13 @@ def model_evaluation():
             elif selected_model == "Random Forest":
                 file_path = Path(
                     "data/predictions/random_forest") / selected_fe / f"predicted_updated_{selected_league}_{selected_season}.parquet"
-            elif selected_model == "XGBoost":
+            # Adjust condition to cover both naming formats for XGBoost
+            elif selected_model in ("XGBoost", "XG Boost"):
                 file_path = Path(
                     "data/predictions/xgboost") / selected_fe / f"predicted_updated_{selected_league}_{selected_season}.parquet"
+                if not file_path.exists():
+                    file_path = Path(
+                        "data/predictions/xgboost") / f"predicted_updated_{selected_league}_{selected_season}.parquet"
             else:
                 file_path = None
         if file_path is None or not file_path.exists():
