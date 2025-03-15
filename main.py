@@ -537,8 +537,8 @@ def parse_predicted_file_details(file_path: Path, base: Path) -> dict:
 @app.route("/model_evaluation", methods=["GET", "POST"])
 def model_evaluation() -> str:
     """
-    Display model performance metrics and prediction file links.
-    Supports searching within prediction data based on user input.
+    Display model performance metrics, prediction file links, and highlight the most interesting
+    predictions based on absolute and percentage differences between actual and predicted market values.
 
     Returns:
         str: Rendered HTML for the model evaluation page.
@@ -578,7 +578,6 @@ def model_evaluation() -> str:
 
     # Build predictions dictionary from predicted file details
     predictions = {"Linear Regression": {}, "Random Forest": {}, "XGBoost": {}}
-
     def insert_into_tree(details: dict) -> None:
         """
         Insert predicted file details into the predictions dictionary.
@@ -601,6 +600,10 @@ def model_evaluation() -> str:
                 if f.is_file():
                     info = parse_predicted_file_details(f, base)
                     insert_into_tree(info)
+
+    # Initialize variables for additional interesting predictions.
+    interesting_abs = None
+    interesting_pct = None
 
     search_results = None
     search_params = {}
@@ -636,12 +639,14 @@ def model_evaluation() -> str:
                         "data/predictions/xgboost") / f"predicted_updated_{selected_league}_{selected_season}.parquet"
             else:
                 file_path = None
+
         if file_path is None or not file_path.exists():
             flash(f"Data file not found: {file_path}", "danger")
             search_results = f"Data file not found: {file_path}"
         else:
             try:
                 df = pd.read_parquet(file_path)
+                # Filter based on search term if provided.
                 if search_term:
                     df = df[df["player"].str.lower().str.contains(search_term)]
                 cols = ["player", "position", "squad", "Market Value", "predicted_market_value"]
@@ -650,6 +655,21 @@ def model_evaluation() -> str:
                 if "predicted_market_value" in df.columns:
                     df.rename(columns={"predicted_market_value": "Predicted Price"}, inplace=True)
                 search_results = df.to_html(classes="table table-striped table-bordered", index=False)
+
+                # Calculate additional interesting metrics if data is available.
+                if "Market Value" in df.columns and "Predicted Price" in df.columns:
+                    df["Absolute Difference"] = (df["Predicted Price"] - df["Market Value"]).abs()
+                    # Avoid division by zero; if Market Value is zero, set percentage diff to NaN.
+                    df["Percentage Difference"] = df.apply(
+                        lambda row: ((row["Predicted Price"] - row["Market Value"]) / row["Market Value"] * 100)
+                        if row["Market Value"] != 0 else np.nan, axis=1
+                    ).abs()
+                    # Select top 5 interesting predictions based on absolute difference.
+                    top_abs = df.nlargest(5, "Absolute Difference")
+                    interesting_abs = top_abs.to_html(classes="table table-striped table-bordered", index=False)
+                    # Select top 5 based on percentage difference.
+                    top_pct = df.nlargest(5, "Percentage Difference")
+                    interesting_pct = top_pct.to_html(classes="table table-striped table-bordered", index=False)
             except Exception as e:
                 flash(f"Error loading data: {e}", "danger")
                 search_results = f"Error loading data: {e}"
@@ -659,7 +679,9 @@ def model_evaluation() -> str:
         metrics=metrics,
         predictions=predictions,
         search_results=search_results,
-        search_params=search_params
+        search_params=search_params,
+        interesting_abs=interesting_abs,
+        interesting_pct=interesting_pct
     )
 
 
@@ -678,7 +700,8 @@ def run_all() -> str:
             (["python", "./preprocessing/preprocessing.py"], "Preprocessing"),
             (["python", "./preprocessing/player_value.py"], "Player value update"),
             (["python", "./models/linear_regression_model.py"], "Linear Regression model training"),
-            (["python", "./models/random_forest_model.py"], "Random Forest model training")
+            (["python", "./models/random_forest_model.py"], "Random Forest model training"),
+            (["python", "./models/xgboost_model.py"], "Random Forest model training")
         ]
         for cmd, description in steps:
             if not run_command(cmd):

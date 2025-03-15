@@ -103,6 +103,34 @@
     </div>
     {% endif %}
 
+    <!-- Section: Most Interesting Predictions by Absolute Difference -->
+    {% if interesting_abs %}
+    <div class="card mb-4">
+        <div class="card-header">
+            <strong>Top 5 Interesting Predictions (Absolute Difference)</strong>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                {{ interesting_abs|safe }}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Section: Most Interesting Predictions by Percentage Difference -->
+    {% if interesting_pct %}
+    <div class="card mb-4">
+        <div class="card-header">
+            <strong>Top 5 Interesting Predictions (Percentage Difference)</strong>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                {{ interesting_pct|safe }}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Performance Metrics Section -->
     <h3>Performance Metrics</h3>
     {% for model_name, table in metrics.items() %}
