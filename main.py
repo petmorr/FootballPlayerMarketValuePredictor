@@ -5,6 +5,7 @@ import time
 import webbrowser
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import requests
 from flask import Flask, render_template, request, redirect, url_for, flash
@@ -171,7 +172,7 @@ def get_clean_basename(file_path: str) -> str:
 
 def read_log_file(file_path: Path) -> str:
     """
-    Read a log file using UTF-8 encoding, with a fallback to latin1 if necessary.
+    Read a log file using latin1 encoding
 
     Args:
         file_path (Path): The path to the log file.
@@ -182,15 +183,8 @@ def read_log_file(file_path: Path) -> str:
     if not file_path.exists():
         return "Log file not found."
     try:
-        with open(file_path, "r", encoding="utf-8") as f:
+        with open(file_path, "r", encoding="latin1") as f:
             return f.read()
-    except UnicodeDecodeError:
-        logger.error(f"UTF-8 decoding failed for {file_path}, trying fallback encoding.")
-        try:
-            with open(file_path, "r", encoding="latin1") as f:
-                return f.read()
-        except Exception as e:
-            return f"Error reading log file: {e}"
     except Exception as e:
         return f"Error reading log file: {e}"
 
@@ -356,7 +350,7 @@ def view_logs() -> str:
         "Web Scrape": base_dir / "preprocessing" / "logging" / "web_scrape.log",
         "Preprocessing": base_dir / "preprocessing" / "logging" / "preprocessing.log",
         "Player Value": base_dir / "preprocessing" / "logging" / "player_value.log",
-        "Models": base_dir / "models" / "logging" / "model_utils.log",
+        "Models": base_dir / "models" / "logging" / "model_utils.log"
     }
     logs_content = {name: read_log_file(path) for name, path in log_files.items()}
     return render_template("logs.html", logs=logs_content)
