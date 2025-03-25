@@ -40,7 +40,7 @@ ensure_module("bs4", "beautifulsoup4")
 # =============================================================================
 logger = configure_logger("web_portal", "web_portal.log")
 app = Flask(__name__)
-app.secret_key = "replace_with_your_secret_key"
+app.secret_key = "replace_with_secret_key"
 
 
 # =============================================================================
