@@ -1,0 +1,181 @@
+/* --------------------------------------------------------------------------
+   Root-level Variables for Theming
+   -------------------------------------------------------------------------- */
+:root {
+    --primary-color: #007bff;
+    --secondary-color: #6610f2;
+    --body-bg: #f8f9fa;
+    --card-shadow: 0 3px 6px rgba(0, 0, 0, 0.05);
+    --hero-gradient: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+    --log-bg: #000;
+    --log-text: #0f0;
+    --log-border: #222;
+    --transition-speed: 0.3s;
+    --card-radius: 6px;
+    --hero-radius: 8px;
+    --scrollbar-track: #333;
+    --scrollbar-thumb: #666;
+    --scrollbar-thumb-hover: #888;
+}
+
+/* --------------------------------------------------------------------------
+   Global Body & Layout
+   -------------------------------------------------------------------------- */
+body {
+    background-color: var(--body-bg);
+    margin: 0;
+    padding: 0;
+    font-family: "Segoe UI", Tahoma, sans-serif;
+    color: #212529;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* Enhance default link appearance */
+a {
+    color: var(--primary-color);
+    text-decoration: none;
+    transition: color var(--transition-speed) ease;
+}
+
+a:hover {
+    color: var(--secondary-color);
+    text-decoration: underline;
+}
+
+/* --------------------------------------------------------------------------
+   Cards with shadows & subtle hover effect
+   -------------------------------------------------------------------------- */
+.card {
+    border-radius: var(--card-radius);
+    box-shadow: var(--card-shadow);
+    transition: transform var(--transition-speed) ease, box-shadow var(--transition-speed) ease;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.08);
+}
+
+/* --------------------------------------------------------------------------
+   Scrollable Log Container
+   -------------------------------------------------------------------------- */
+.scrollable-logs {
+    background-color: var(--log-bg);
+    color: var(--log-text);
+    padding: 1em;
+    height: 300px;
+    overflow-y: scroll;
+    font-family: monospace;
+    border-radius: 4px;
+    border: 1px solid var(--log-border);
+}
+
+/* Customized scrollbars for logs */
+.scrollable-logs::-webkit-scrollbar {
+    width: 0.75rem;
+}
+
+.scrollable-logs::-webkit-scrollbar-track {
+    background: var(--scrollbar-track);
+    border-radius: 4px;
+}
+
+.scrollable-logs::-webkit-scrollbar-thumb {
+    background-color: var(--scrollbar-thumb);
+    border-radius: 4px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+}
+
+.scrollable-logs::-webkit-scrollbar-thumb:hover {
+    background-color: var(--scrollbar-thumb-hover);
+}
+
+/* --------------------------------------------------------------------------
+   Table Responsiveness
+   -------------------------------------------------------------------------- */
+.table-responsive {
+    overflow-x: auto;
+}
+
+.table th, .table td {
+    vertical-align: middle;
+}
+
+/* Give table rows a subtle highlight on hover */
+.table-hover tbody tr:hover {
+    background-color: rgba(0, 123, 255, 0.07);
+}
+
+/* --------------------------------------------------------------------------
+   Hero Section
+   -------------------------------------------------------------------------- */
+.hero {
+    padding: 3rem 2rem;
+    text-align: center;
+    background: var(--hero-gradient);
+    color: #fff;
+    border-radius: var(--hero-radius);
+    position: relative;
+    overflow: hidden;
+}
+
+/* Animated background gradient effect */
+.hero::before {
+    content: "";
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: var(--hero-gradient);
+    animation: heroGradient 6s ease infinite alternate;
+    z-index: 0;
+}
+
+.hero > * {
+    position: relative;
+    z-index: 1;
+}
+
+@keyframes heroGradient {
+    0% {
+        transform: translate(0%, 0%);
+    }
+    100% {
+        transform: translate(-25%, -25%);
+    }
+}
+
+/* Example styling for hero headings */
+.hero h1 {
+    font-size: clamp(2rem, 5vw, 3rem);
+    margin-bottom: 1rem;
+    font-weight: 700;
+}
+
+.hero p {
+    font-size: clamp(1rem, 2.5vw, 1.25rem);
+}
+
+/* --------------------------------------------------------------------------
+   Responsive Media Queries
+   -------------------------------------------------------------------------- */
+/* Adjust body font-size, spacing on smaller screens */
+@media (max-width: 576px) {
+    body {
+        font-size: 0.95rem;
+    }
+
+    .hero {
+        padding: 2rem 1rem;
+    }
+}
+
+/* For medium devices */
+@media (min-width: 768px) and (max-width: 991px) {
+    .hero {
+        padding: 3rem 3rem;
+    }
+}

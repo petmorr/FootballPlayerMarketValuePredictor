@@ -2,16 +2,12 @@
 {% block title %}Model Preprocessing{% endblock %}
 
 {% block content %}
-<div class="mt-3">
-    <h2>Model Preprocessing</h2>
-    <p>
-        This section runs the full preprocessing pipeline—including web scraping, data preprocessing, and player
-        transfer value extraction.
-        After processing, the system will check for any players missing transfer values.
-        If missing values are found, you will be prompted to provide manual input.
-    </p>
-    <form method="POST">
-        <button class="btn btn-primary" type="submit">Run Model Preprocessing</button>
-    </form>
-</div>
+<h2>Model Preprocessing</h2>
+<p>
+    Runs the entire preprocessing pipeline (web scraping, data cleaning, and player value updates).
+    After completion, any missing transfer values are identified for manual input.
+</p>
+<form method="POST">
+    <button class="btn btn-primary" type="submit">Run Model Preprocessing</button>
+</form>
 {% endblock %}

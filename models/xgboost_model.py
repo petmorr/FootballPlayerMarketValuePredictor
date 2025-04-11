@@ -1,12 +1,6 @@
 """
-xgboost_model.py
-
-Full Pipeline for Training and Predicting Player Transfer Prices using XGBoost.
-
-This script uses a GPU-accelerated XGBoost regressor (XGBRegressorGPU) with an extensive
-hyperparameter grid and HalvingGridSearchCV to train and evaluate the model on three preprocessed variants.
-GPU acceleration is enabled by setting tree_method='hist' and device='cuda'.
-Performance metrics are saved to a CSV file.
+Train and predict player market values using GPU-accelerated XGBoost.
+Hyperparameters are tuned via HalvingGridSearchCV, applying log transform on targets.
 """
 
 import numpy as np
@@ -19,24 +13,20 @@ from model_utils import run_training_pipeline, build_preprocessor, XGBRegressorG
 
 def xgb_pipeline_builder(X_train) -> Pipeline:
     """
-    Build a scikit-learn pipeline for XGBoost regression with GPU acceleration.
-
-    This function constructs a pipeline that preprocesses the training data and applies
-    an XGBoost regressor wrapped in a TransformedTargetRegressor (using log1p transform on target).
-
-    Args:
-        X_train: The training features used to fit the preprocessor.
-
-    Returns:
-        Pipeline: The constructed pipeline.
+    Create a pipeline with data preprocessing and a GPU-accelerated XGBRegressor,
+    wrapped in a log-transform for the target.
     """
     preprocessor = build_preprocessor(X_train)
-    xgb_gpu = XGBRegressorGPU(random_state=42, tree_method='hist', device='cuda', verbosity=1, n_jobs=-1)
-    regressor = TransformedTargetRegressor(regressor=xgb_gpu, func=np.log1p, inverse_func=np.expm1)
-    return Pipeline(steps=[("preprocessor", preprocessor), ("regressor", regressor)])
+    xgb_gpu = XGBRegressorGPU(
+        random_state=42, tree_method="hist", device="cuda", verbosity=1, n_jobs=-1
+    )
+    regressor = TransformedTargetRegressor(
+        regressor=xgb_gpu, func=np.log1p, inverse_func=np.expm1
+    )
+    return Pipeline([("preprocessor", preprocessor), ("regressor", regressor)])
 
 
-# Define hyperparameter grid for XGBoost.
+# Hyperparameter grid
 xgb_param_grid = {
     "regressor__regressor__n_estimators": [100, 300, 500],
     "regressor__regressor__max_depth": [3, 7, 15],
@@ -46,7 +36,7 @@ xgb_param_grid = {
     "regressor__regressor__gamma": [0, 0.5, 1],
     "regressor__regressor__min_child_weight": [1, 5],
     "regressor__regressor__reg_alpha": [0, 1],
-    "regressor__regressor__reg_lambda": [1, 2]
+    "regressor__regressor__reg_lambda": [1, 2],
 }
 
 if __name__ == "__main__":
@@ -58,5 +48,5 @@ if __name__ == "__main__":
         use_sample_weight=False,
         model_filename="xgboost_model",
         predictions_subdir="xgboost",
-        metrics_filename="performance_metrics_xgboost.csv"
+        metrics_filename="performance_metrics_xgboost.csv",
     )

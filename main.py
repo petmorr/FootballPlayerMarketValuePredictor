@@ -1,30 +1,27 @@
+import base64
 import os
 import subprocess
 import sys
 import time
 import webbrowser
+from io import BytesIO
 from pathlib import Path
 
+import matplotlib
 import numpy as np
 import pandas as pd
 import requests
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+
 from flask import Flask, render_template, request, redirect, url_for, flash
 
 from logging_config import configure_logger
 
 
-# =============================================================================
-# Module Setup
-# =============================================================================
 def ensure_module(module_name: str, package_name: str = None) -> None:
-    """
-    Ensure that the specified module is installed. If not, install it using pip.
-
-    Args:
-        module_name (str): The name of the module to check.
-        package_name (str, optional): The package name to install if different from module_name.
-                                      Defaults to None.
-    """
+    """Ensures a Python module is installed."""
     try:
         __import__(module_name)
     except ImportError:
@@ -35,24 +32,13 @@ def ensure_module(module_name: str, package_name: str = None) -> None:
 
 ensure_module("bs4", "beautifulsoup4")
 
-# =============================================================================
-# Application Initialization
-# =============================================================================
 logger = configure_logger("web_portal", "web_portal.log")
 app = Flask(__name__)
 app.secret_key = "replace_with_secret_key"
 
 
-# =============================================================================
-# API Server Utilities
-# =============================================================================
 def check_api_running() -> bool:
-    """
-    Check if the local API server is running by sending a GET request.
-
-    Returns:
-        bool: True if the API server responds with HTTP status 200, else False.
-    """
+    """Checks if the local API server is running."""
     try:
         response = requests.get("http://localhost:8000", timeout=3)
         return response.status_code == 200
@@ -61,17 +47,9 @@ def check_api_running() -> bool:
 
 
 def start_local_api() -> bool:
-    """
-    Start the local API server if it is not already running.
-
-    This function clones the API repository if needed, installs dependencies using Poetry,
-    and starts the API server. It then verifies the server is running.
-
-    Returns:
-        bool: True if the API server starts successfully, else False.
-    """
+    """Starts the local API server if not already running."""
     if check_api_running():
-        logger.info("API server already running. Skipping startup.")
+        logger.info("API server already running.")
         return True
 
     api_repo_dir = Path("transfermarkt-api")
@@ -83,7 +61,7 @@ def start_local_api() -> bool:
             logger.error(f"Error cloning repository: {e}")
             return False
     else:
-        logger.info("transfermarkt-api repository already exists.")
+        logger.info("transfermarkt-api repository exists.")
 
     try:
         logger.info("Installing API dependencies via Poetry.")
@@ -91,12 +69,12 @@ def start_local_api() -> bool:
         logger.info("Verifying dependencies with Poetry.")
         subprocess.check_call(["poetry", "check"], cwd=str(api_repo_dir))
     except Exception as e:
-        logger.error(f"Error installing or verifying API dependencies: {e}")
+        logger.error(f"Error installing or verifying dependencies: {e}")
         return False
 
     os.environ["PYTHONPATH"] = os.environ.get("PYTHONPATH", "") + os.pathsep + str(os.getcwd())
     try:
-        logger.info("Starting API server using Poetry.")
+        logger.info("Starting API server via Poetry.")
         subprocess.Popen(["poetry", "run", "python", "app/main.py"], cwd=str(api_repo_dir))
         time.sleep(5)
         if not check_api_running():
@@ -111,30 +89,17 @@ def start_local_api() -> bool:
 
 @app.before_request
 def run_preprocessing_once() -> None:
-    """
-    Flask hook to ensure the API server is started only once before handling requests.
-    """
+    """Ensures the API server is started once before handling requests."""
     if not app.config.get("PREPROCESSING_DONE"):
         if not start_local_api():
-            flash("Failed to start local API server. Some functionality may be unavailable.", "danger")
+            flash("Failed to start local API server.", "danger")
         else:
-            flash("Local API server started and backend initialized.", "success")
+            flash("Local API server started.", "success")
         app.config["PREPROCESSING_DONE"] = True
 
 
 def run_command(command: list) -> bool:
-    """
-    Execute a system command.
-
-    If the command begins with 'python', it will run with the current interpreter and
-    set the working directory to the script's parent folder.
-
-    Args:
-        command (list): The command and its arguments as a list.
-
-    Returns:
-        bool: True if the command executes successfully, otherwise False.
-    """
+    """Runs a command in a subprocess."""
     cwd = None
     if command and command[0].lower() == "python" and len(command) > 1:
         script_path = Path(command[1]).resolve()
@@ -149,37 +114,12 @@ def run_command(command: list) -> bool:
         subprocess.check_call(full_command, cwd=cwd)
         return True
     except subprocess.CalledProcessError as e:
-        logger.error(f"Command {' '.join(map(str, full_command))} failed: {e}")
+        logger.error(f"Command failed: {e}")
         return False
 
 
-# =============================================================================
-# Helper Functions for Data Processing and Logging
-# =============================================================================
-def get_clean_basename(file_path: str) -> str:
-    """
-    Extract a clean basename from a file path by removing extra extensions.
-
-    Args:
-        file_path (str): The file path.
-
-    Returns:
-        str: The cleaned basename.
-    """
-    p = Path(file_path)
-    return p.name.split('.')[0] if len(p.suffixes) > 1 else p.stem
-
-
 def read_log_file(file_path: Path) -> str:
-    """
-    Read a log file using latin1 encoding
-
-    Args:
-        file_path (Path): The path to the log file.
-
-    Returns:
-        str: The contents of the log file or an error message.
-    """
+    """Reads a log file with latin1 encoding."""
     if not file_path.exists():
         return "Log file not found."
     try:
@@ -190,12 +130,7 @@ def read_log_file(file_path: Path) -> str:
 
 
 def load_missing_transfer_values() -> list:
-    """
-    Recursively load entries with missing transfer values from all subdirectories in data/updated.
-
-    Returns:
-        list: A list of dictionaries detailing missing transfer value entries.
-    """
+    """Loads missing market value entries from parquet files."""
     missing_entries = []
     updated_dir = Path("data/updated")
     for file in updated_dir.rglob("updated_*.parquet"):
@@ -204,11 +139,8 @@ def load_missing_transfer_values() -> list:
         except Exception as e:
             logger.error(f"Error reading {file}: {e}")
             continue
-
-        # Normalize column names
         df.columns = [c.lower() for c in df.columns]
 
-        # Determine the market value column
         if "market value" in df.columns:
             mv_col = "market value"
         elif "market_value" in df.columns:
@@ -218,21 +150,10 @@ def load_missing_transfer_values() -> list:
             if candidate_cols:
                 mv_col = candidate_cols[0]
             else:
-                logger.warning(f"No market value column found in {file.name}; skipping.")
+                logger.warning(f"No market value column found in {file.name}.")
                 continue
 
-        logger.info(f"Unique values in '{mv_col}' for {file.name}: {df[mv_col].unique()}")
-
         def is_missing(val):
-            """
-            Determine if a given market value is considered missing.
-
-            Args:
-                val: The value to evaluate.
-
-            Returns:
-                bool: True if the value is missing, else False.
-            """
             if pd.isna(val):
                 return True
             if isinstance(val, str):
@@ -240,14 +161,11 @@ def load_missing_transfer_values() -> list:
             return False
 
         missing_df = df[df[mv_col].apply(is_missing)]
-        logger.info(f"Found {missing_df.shape[0]} missing market value entries in {file.name}")
-
-        # Extract metadata from the filename and subdirectory
-        base_name = file.stem  # e.g. updated_Premier-League_2022-2023
+        base_name = file.stem
         parts = base_name.split("_")
         league = parts[1] if len(parts) >= 3 else "Unknown"
         season = parts[2] if len(parts) >= 3 else "Unknown"
-        fe_variant = file.parent.name  # Feature engineering variant (subdirectory)
+        fe_variant = file.parent.name
 
         for _, row in missing_df.iterrows():
             entry = {
@@ -263,15 +181,7 @@ def load_missing_transfer_values() -> list:
 
 
 def group_missing_entries(missing_entries: list) -> dict:
-    """
-    Group missing transfer value entries by dataset identifier.
-
-    Args:
-        missing_entries (list): A list of missing transfer value entry dictionaries.
-
-    Returns:
-        dict: A dictionary keyed by dataset identifier with corresponding entry lists.
-    """
+    """Groups missing entries by dataset."""
     grouped = {}
     for entry in missing_entries:
         ds = entry["dataset"]
@@ -280,22 +190,12 @@ def group_missing_entries(missing_entries: list) -> dict:
 
 
 def update_transfer_value_in_parquet(dataset: str, season: str, updates: list) -> bool:
-    """
-    Update the market value for specified entries in a parquet file.
-
-    Args:
-        dataset (str): The dataset identifier.
-        season (str): The season identifier.
-        updates (list): A list of update dictionaries with new transfer values.
-
-    Returns:
-        bool: True if the update is successful, otherwise False.
-    """
+    """Updates the parquet files with new market values."""
     updated_dir = Path("data/updated")
     filename = f"updated_{dataset}.parquet"
     file_path = updated_dir / filename
     if not file_path.exists():
-        logger.error(f"File {file_path} not found for updating transfer value.")
+        logger.error(f"File not found: {file_path}")
         return False
     try:
         df = pd.read_parquet(file_path)
@@ -310,10 +210,11 @@ def update_transfer_value_in_parquet(dataset: str, season: str, updates: list) -
         new_value = upd["manual_transfer_value"]
         mask = (df["player"].str.lower() == player.lower()) & (df["squad"].str.lower() == team.lower())
         if mask.sum() == 0:
-            logger.warning(f"No matching row found for {player} in {team} in {file_path}.")
+            logger.warning(f"No matching row for {player} in {team}.")
             continue
         df.loc[mask, "market value"] = new_value
-        logger.info(f"Updated {player} ({team}) in {dataset} with value {new_value}.")
+        logger.info(f"Updated {player} in {dataset} with {new_value}.")
+
     try:
         df.to_parquet(file_path, index=False)
     except Exception as e:
@@ -322,28 +223,13 @@ def update_transfer_value_in_parquet(dataset: str, season: str, updates: list) -
     return True
 
 
-# =============================================================================
-# Route Handlers
-# =============================================================================
 @app.route("/")
 def index() -> str:
-    """
-    Render the home page.
-
-    Returns:
-        str: Rendered HTML for the home page.
-    """
     return render_template("index.html", title="Home")
 
 
 @app.route("/logs")
 def view_logs() -> str:
-    """
-    Render the logs page by reading and displaying various log files.
-
-    Returns:
-        str: Rendered HTML for the logs page.
-    """
     base_dir = Path(__file__).parent
     log_files = {
         "Web Portal": base_dir / "logging" / "web_portal.log",
@@ -358,16 +244,9 @@ def view_logs() -> str:
 
 @app.route("/model_preprocessing", methods=["GET", "POST"])
 def model_preprocessing() -> str:
-    """
-    Handle model preprocessing by running web scraping, data preprocessing, and player value updates.
-    On POST, executes the preprocessing pipeline; on GET, renders the preprocessing page.
-
-    Returns:
-        str: Rendered HTML for the preprocessing page or a redirect response.
-    """
     if request.method == "POST":
         if not check_api_running():
-            flash("API server is not running. Please start it manually.", "danger")
+            flash("API server is not running.", "danger")
             return redirect(url_for("model_preprocessing"))
         try:
             if not run_command(["python", "./preprocessing/web_scrape.py"]):
@@ -376,31 +255,23 @@ def model_preprocessing() -> str:
                 raise Exception("Preprocessing failed.")
             if not run_command(["python", "./preprocessing/player_value.py"]):
                 raise Exception("Player value update failed.")
-            flash("Preprocessing completed successfully.", "success")
+            flash("Preprocessing completed.", "success")
         except Exception as e:
             flash("Error during preprocessing.", "danger")
-            logger.error(f"Error during preprocessing: {e}")
+            logger.error(f"Error: {e}")
             return redirect(url_for("model_preprocessing"))
         missing_entries = load_missing_transfer_values()
         if missing_entries:
-            flash("Some players are missing transfer values. Please provide manual inputs.", "warning")
-            logger.info("Missing transfer values detected; redirecting to manual input.")
+            flash("Some players are missing transfer values.", "warning")
             return redirect(url_for("manual_input"))
         else:
-            flash("Model preprocessing completed successfully. No missing transfer values found.", "success")
+            flash("No missing transfer values.", "success")
             return redirect(url_for("index"))
     return render_template("model_preprocessing.html", title="Model Preprocessing")
 
 
 @app.route("/manual_input", methods=["GET", "POST"])
 def manual_input() -> str:
-    """
-    Handle manual input for missing transfer values.
-    On POST, processes submitted updates; on GET, displays the missing entries for user input.
-
-    Returns:
-        str: Rendered HTML for the manual input page or a redirect response.
-    """
     if request.method == "POST":
         players = request.form.getlist("player")
         teams = request.form.getlist("team")
@@ -410,83 +281,58 @@ def manual_input() -> str:
         manual_values = request.form.getlist("manual_value")
         updates = []
         for ds, ss, p, t, cd, mv in zip(datasets, seasons, players, teams, closest_dates, manual_values):
-            if mv.strip() == "":
-                continue
-            updates.append({
-                "dataset": ds,
-                "season": ss,
-                "player": p,
-                "team": t,
-                "closest_date": cd,
-                "manual_transfer_value": float(mv)
-            })
+            if mv.strip():
+                updates.append({
+                    "dataset": ds,
+                    "season": ss,
+                    "player": p,
+                    "team": t,
+                    "closest_date": cd,
+                    "manual_transfer_value": float(mv)
+                })
         grouped_updates = {}
         for upd in updates:
             ds = upd["dataset"]
             grouped_updates.setdefault(ds, []).append(upd)
         for ds, upd_list in grouped_updates.items():
             if not update_transfer_value_in_parquet(ds, upd_list[0]["season"], upd_list):
-                flash(f"Failed to update dataset {ds}.", "danger")
+                flash(f"Failed to update {ds}.", "danger")
             else:
-                flash(f"Successfully updated dataset {ds}.", "success")
+                flash(f"Updated {ds}.", "success")
         return redirect(url_for("manual_input"))
     else:
         missing_entries = load_missing_transfer_values()
-        grouped_missing = group_missing_entries(missing_entries)
-        return render_template("manual_input.html", grouped_missing=grouped_missing,
-                               title="Manual Transfer Value Input")
+        group_missing = group_missing_entries(missing_entries)
+        return render_template("manual_input.html", grouped_missing=group_missing, title="Manual Transfer Value Input")
 
 
 @app.route("/model_creation", methods=["GET", "POST"])
 def model_creation() -> str:
-    """
-    Handle model creation requests by executing the selected model training script.
-    On POST, runs the model creation process; on GET, renders the model creation page.
-
-    Returns:
-        str: Rendered HTML for the model creation page or a redirect response.
-    """
     if request.method == "POST":
         model_choice = request.form.get("model_choice")
         if model_choice == "LinearRegression":
             if run_command(["python", "./models/linear_regression_model.py"]):
-                flash("Linear Regression model created successfully.", "success")
-                logger.info("Linear Regression model creation succeeded.")
+                flash("Linear Regression created.", "success")
             else:
-                flash("Linear Regression model creation failed.", "danger")
-                logger.error("Linear Regression model creation failed.")
+                flash("Linear Regression failed.", "danger")
         elif model_choice == "RandomForest":
             if run_command(["python", "./models/random_forest_model.py"]):
-                flash("Random Forest model created successfully.", "success")
-                logger.info("Random Forest model creation succeeded.")
+                flash("Random Forest created.", "success")
             else:
-                flash("Random Forest model creation failed.", "danger")
-                logger.error("Random Forest model creation failed.")
+                flash("Random Forest failed.", "danger")
         elif model_choice == "XGBoost":
             if run_command(["python", "./models/xgboost_model.py"]):
-                flash("XGBoost model created successfully.", "success")
-                logger.info("XGBoost model creation succeeded.")
+                flash("XGBoost created.", "success")
             else:
-                flash("XGBoost model creation failed.", "danger")
-                logger.error("XGBoost model creation failed.")
+                flash("XGBoost failed.", "danger")
         else:
             flash("Unknown model choice.", "warning")
-            logger.warning("Unknown model choice selected in model_creation.")
         return redirect(url_for("model_creation"))
     return render_template("model_creation.html", title="Model Creation")
 
 
 def safe_relative_path(file_path: Path, base: Path) -> str:
-    """
-    Compute the relative path of file_path with respect to base.
-
-    Args:
-        file_path (Path): The file path.
-        base (Path): The base directory.
-
-    Returns:
-        str: The relative path if possible, otherwise the absolute path.
-    """
+    """Computes relative path if possible."""
     try:
         return str(file_path.relative_to(base))
     except ValueError:
@@ -494,17 +340,7 @@ def safe_relative_path(file_path: Path, base: Path) -> str:
 
 
 def parse_predicted_file_details(file_path: Path, base: Path) -> dict:
-    """
-    Extract details from a predicted file's path including model name, feature variant,
-    league/season, and generate a relative link.
-
-    Args:
-        file_path (Path): The predicted file path.
-        base (Path): The base directory for relative paths.
-
-    Returns:
-        dict: A dictionary containing model_name, fe_variant, league_season, and link.
-    """
+    """Extracts details from a predicted file's path."""
     parts = file_path.parts
     model_name = "Unknown Model"
     if "linear_regression" in parts:
@@ -513,6 +349,7 @@ def parse_predicted_file_details(file_path: Path, base: Path) -> dict:
         model_name = "Random Forest"
     elif "xgboost" in parts:
         model_name = "XGBoost"
+
     fe_variant = "Unknown"
     for i, p in enumerate(parts):
         if p in ("linear_regression", "random_forest", "xgboost") and i + 1 < len(parts):
@@ -525,60 +362,98 @@ def parse_predicted_file_details(file_path: Path, base: Path) -> dict:
         filename = filename[:-8]
     league_season = filename
     link = safe_relative_path(file_path, base)
-    return {"model_name": model_name, "fe_variant": fe_variant, "league_season": league_season, "link": link}
+    return {
+        "model_name": model_name,
+        "fe_variant": fe_variant,
+        "league_season": league_season,
+        "link": link
+    }
+
+
+def df_to_bar_base64_png(df: pd.DataFrame, x_col: str, y_col: str, title: str) -> str:
+    """Returns a base64-encoded PNG of a bar chart."""
+    fig, ax = plt.subplots(figsize=(6, 4))
+    ax.bar(df[x_col], df[y_col], color='skyblue')
+    ax.set_title(title)
+    ax.set_xlabel(x_col)
+    ax.set_ylabel(y_col)
+    plt.xticks(rotation=45, ha="right")
+    plt.tight_layout()
+    buffer = BytesIO()
+    plt.savefig(buffer, format="png")
+    plt.close(fig)
+    buffer.seek(0)
+    return base64.b64encode(buffer.read()).decode("utf-8")
+
+
+def df_to_dist_base64_png(series: pd.Series, title: str) -> str:
+    """Returns a base64-encoded PNG of a histogram distribution."""
+    fig, ax = plt.subplots(figsize=(6, 4))
+    ax.hist(series.dropna(), bins=15, color='orchid', edgecolor='black')
+    ax.set_title(title)
+    ax.set_xlabel("Error")
+    ax.set_ylabel("Count")
+    plt.tight_layout()
+    buffer = BytesIO()
+    plt.savefig(buffer, format="png")
+    plt.close(fig)
+    buffer.seek(0)
+    return base64.b64encode(buffer.read()).decode("utf-8")
+
+
+def df_to_scatter_base64_png(df: pd.DataFrame, actual_col: str, pred_col: str, title: str) -> str:
+    """Returns a base64-encoded PNG of a scatter plot (actual vs. predicted)."""
+    fig, ax = plt.subplots(figsize=(6, 4))
+    ax.scatter(df[actual_col], df[pred_col], alpha=0.6, color='teal')
+    max_val = max(df[actual_col].max(), df[pred_col].max())
+    ax.plot([0, max_val], [0, max_val], color='red', linestyle='--')
+    ax.set_title(title)
+    ax.set_xlabel(actual_col)
+    ax.set_ylabel(pred_col)
+    plt.tight_layout()
+    buffer = BytesIO()
+    plt.savefig(buffer, format="png")
+    plt.close(fig)
+    buffer.seek(0)
+    return base64.b64encode(buffer.read()).decode("utf-8")
 
 
 @app.route("/model_evaluation", methods=["GET", "POST"])
 def model_evaluation() -> str:
-    """
-    Display model performance metrics, prediction file links, and highlight the most interesting
-    predictions based on absolute and percentage differences between actual and predicted market values.
+    lr_file = Path("models/results/performance_metrics_linear_regression.csv")
+    rf_file = Path("models/results/performance_metrics_random_forest.csv")
+    xgb_file = Path("models/results/performance_metrics_xgboost.csv")
 
-    Returns:
-        str: Rendered HTML for the model evaluation page.
-    """
-    # Read performance metrics from CSV files
-    lr_metrics_file = Path("models/results/performance_metrics_linear_regression.csv")
-    rf_metrics_file = Path("models/results/performance_metrics_random_forest.csv")
-    xgboost_metrics_file = Path("models/results/performance_metrics_xgboost.csv")
     metrics = {}
-    if lr_metrics_file.exists():
-        try:
-            lr_df = pd.read_csv(lr_metrics_file)
-            metrics["Linear Regression"] = lr_df.to_html(classes="table table-striped table-bordered", index=False)
-        except Exception as e:
-            logger.error(f"Error reading linear regression metrics: {e}")
-            metrics["Linear Regression"] = f"Error reading metrics: {e}"
-    else:
-        metrics["Linear Regression"] = "Metrics file not found."
-    if rf_metrics_file.exists():
-        try:
-            rf_df = pd.read_csv(rf_metrics_file)
-            metrics["Random Forest"] = rf_df.to_html(classes="table table-striped table-bordered", index=False)
-        except Exception as e:
-            logger.error(f"Error reading random forest metrics: {e}")
-            metrics["Random Forest"] = f"Error reading metrics: {e}"
-    else:
-        metrics["Random Forest"] = "Metrics file not found."
-    if xgboost_metrics_file.exists():
-        try:
-            xgboost_df = pd.read_csv(xgboost_metrics_file)
-            metrics["XGBoost"] = xgboost_df.to_html(classes="table table-striped table-bordered", index=False)
-        except Exception as e:
-            logger.error(f"Error reading XGBoost metrics: {e}")
-            metrics["XGBoost"] = f"Error reading metrics: {e}"
-    else:
-        metrics["XGBoost"] = "Metrics file not found."
+    model_metrics_map = {
+        "Linear Regression": lr_file,
+        "Random Forest": rf_file,
+        "XGBoost": xgb_file
+    }
+    combined_metrics = []
+    for model_name, csv_file in model_metrics_map.items():
+        if csv_file.exists():
+            try:
+                df_m = pd.read_csv(csv_file)
+                metrics[model_name] = df_m.to_html(classes="table table-striped table-bordered", index=False)
+                row_data = {"Model": model_name}
+                for col in ["MAE", "MSE", "RMSE", "R2"]:
+                    if col in df_m.columns:
+                        row_data[col] = df_m.loc[0, col]
+                combined_metrics.append(row_data)
+            except Exception as e:
+                logger.error(f"Error reading {model_name} metrics: {e}")
+                metrics[model_name] = f"Error: {e}"
+        else:
+            metrics[model_name] = "Metrics file not found."
 
-    # Build predictions dictionary from predicted file details
-    predictions = {"Linear Regression": {}, "Random Forest": {}, "XGBoost": {}}
+    predictions = {
+        "Linear Regression": {},
+        "Random Forest": {},
+        "XGBoost": {}
+    }
+
     def insert_into_tree(details: dict) -> None:
-        """
-        Insert predicted file details into the predictions dictionary.
-
-        Args:
-            details (dict): A dictionary containing file details.
-        """
         m = details["model_name"]
         fe = details["fe_variant"]
         ls = details["league_season"]
@@ -586,19 +461,27 @@ def model_evaluation() -> str:
         predictions.setdefault(m, {}).setdefault(fe, {})[ls] = link
 
     base = Path.cwd()
-    for pred_dir in [Path("data/predictions/linear_regression"),
-                     Path("data/predictions/random_forest"),
-                     Path("data/predictions/xgboost")]:
+    for pred_dir in [
+        Path("data/predictions/linear_regression"),
+        Path("data/predictions/random_forest"),
+        Path("data/predictions/xgboost")
+    ]:
         if pred_dir.exists():
             for f in pred_dir.rglob("*"):
                 if f.is_file():
                     info = parse_predicted_file_details(f, base)
                     insert_into_tree(info)
 
-    # Initialize variables for additional interesting predictions.
     interesting_abs = None
     interesting_pct = None
-
+    interesting_abs_plot = None
+    interesting_pct_plot = None
+    interesting_under_plot = None
+    interesting_over_plot = None
+    top_under_valued_table = None
+    top_over_valued_table = None
+    error_dist_plot = None
+    scatter_plot = None
     search_results = None
     search_params = {}
     if request.method == "POST" and "search_term" in request.form:
@@ -616,31 +499,34 @@ def model_evaluation() -> str:
             "view_type": view_type,
             "search_term": search_term
         }
+
         if view_type == "Raw":
             file_path = Path("data/updated") / selected_fe / f"updated_{selected_league}_{selected_season}.parquet"
         else:
             if selected_model == "Linear Regression":
-                file_path = Path(
-                    "data/predictions/linear_regression") / selected_fe / f"predicted_updated_{selected_league}_{selected_season}.parquet"
+                file_path = (Path("data/predictions/linear_regression")
+                             / selected_fe
+                             / f"predicted_updated_{selected_league}_{selected_season}.parquet")
             elif selected_model == "Random Forest":
-                file_path = Path(
-                    "data/predictions/random_forest") / selected_fe / f"predicted_updated_{selected_league}_{selected_season}.parquet"
+                file_path = (Path("data/predictions/random_forest")
+                             / selected_fe
+                             / f"predicted_updated_{selected_league}_{selected_season}.parquet")
             elif selected_model in ("XGBoost", "XG Boost"):
-                file_path = Path(
-                    "data/predictions/xgboost") / selected_fe / f"predicted_updated_{selected_league}_{selected_season}.parquet"
+                file_path = (Path("data/predictions/xgboost")
+                             / selected_fe
+                             / f"predicted_updated_{selected_league}_{selected_season}.parquet")
                 if not file_path.exists():
-                    file_path = Path(
-                        "data/predictions/xgboost") / f"predicted_updated_{selected_league}_{selected_season}.parquet"
+                    file_path = (Path("data/predictions/xgboost")
+                                 / f"predicted_updated_{selected_league}_{selected_season}.parquet")
             else:
                 file_path = None
 
-        if file_path is None or not file_path.exists():
+        if not file_path or not file_path.exists():
             flash(f"Data file not found: {file_path}", "danger")
             search_results = f"Data file not found: {file_path}"
         else:
             try:
                 df = pd.read_parquet(file_path)
-                # Filter based on search term if provided.
                 if search_term:
                     df = df[df["player"].str.lower().str.contains(search_term)]
                 cols = ["player", "position", "squad", "Market Value", "predicted_market_value"]
@@ -650,23 +536,74 @@ def model_evaluation() -> str:
                     df.rename(columns={"predicted_market_value": "Predicted Price"}, inplace=True)
                 search_results = df.to_html(classes="table table-striped table-bordered", index=False)
 
-                # Calculate additional interesting metrics if data is available.
                 if "Market Value" in df.columns and "Predicted Price" in df.columns:
                     df["Absolute Difference"] = (df["Predicted Price"] - df["Market Value"]).abs()
-                    # Avoid division by zero; if Market Value is zero, set percentage diff to NaN.
+                    df["Error"] = df["Predicted Price"] - df["Market Value"]
                     df["Percentage Difference"] = df.apply(
-                        lambda row: ((row["Predicted Price"] - row["Market Value"]) / row["Market Value"] * 100)
+                        lambda row: ((row["Predicted Price"] - row["Market Value"])
+                                     / row["Market Value"] * 100)
                         if row["Market Value"] != 0 else np.nan, axis=1
                     ).abs()
-                    # Select top 5 interesting predictions based on absolute difference.
-                    top_abs = df.nlargest(5, "Absolute Difference")
+
+                    top_abs = df.nlargest(5, "Absolute Difference").copy()
                     interesting_abs = top_abs.to_html(classes="table table-striped table-bordered", index=False)
-                    # Select top 5 based on percentage difference.
-                    top_pct = df.nlargest(5, "Percentage Difference")
+                    if not top_abs.empty:
+                        top_abs["player"] = top_abs["player"].astype(str)
+                        interesting_abs_plot = df_to_bar_base64_png(
+                            top_abs, "player", "Absolute Difference", "Top 5 Absolute Diff"
+                        )
+
+                    top_pct = df.nlargest(5, "Percentage Difference").copy()
                     interesting_pct = top_pct.to_html(classes="table table-striped table-bordered", index=False)
+                    if not top_pct.empty:
+                        top_pct["player"] = top_pct["player"].astype(str)
+                        interesting_pct_plot = df_to_bar_base64_png(
+                            top_pct, "player", "Percentage Difference", "Top 5 Percentage Diff"
+                        )
+
+                    df_neg = df[df["Error"] < 0].nsmallest(5, "Error").copy()
+                    if not df_neg.empty:
+                        df_neg["player"] = df_neg["player"].astype(str)
+                        top_under_valued_table = df_neg.to_html(classes="table table-striped table-bordered",
+                                                                index=False)
+                        interesting_under_plot = df_to_bar_base64_png(
+                            df_neg, "player", "Error", "Top 5 Under-Valued (Negative Error)"
+                        )
+
+                    df_pos = df[df["Error"] > 0].nlargest(5, "Error").copy()
+                    if not df_pos.empty:
+                        df_pos["player"] = df_pos["player"].astype(str)
+                        top_over_valued_table = df_pos.to_html(classes="table table-striped table-bordered",
+                                                               index=False)
+                        interesting_over_plot = df_to_bar_base64_png(
+                            df_pos, "player", "Error", "Top 5 Over-Valued (Positive Error)"
+                        )
+
+                    error_dist_plot = df_to_dist_base64_png(df["Error"], "Distribution of Error")
+
+                    scatter_plot = df_to_scatter_base64_png(df, "Market Value", "Predicted Price",
+                                                            "Market Value vs. Predicted Price")
             except Exception as e:
                 flash(f"Error loading data: {e}", "danger")
-                search_results = f"Error loading data: {e}"
+                search_results = f"Error: {e}"
+
+    overall_metrics_plot = None
+    if combined_metrics:
+        combined_df = pd.DataFrame(combined_metrics)
+        if "MAE" in combined_df.columns:
+            combined_df = combined_df.sort_values("Model")
+            fig, ax = plt.subplots(figsize=(6, 4))
+            ax.bar(combined_df["Model"], combined_df["MAE"], color="salmon")
+            ax.set_title("Model Comparison (MAE)")
+            ax.set_xlabel("Model")
+            ax.set_ylabel("MAE")
+            plt.tight_layout()
+            buffer = BytesIO()
+            plt.savefig(buffer, format="png")
+            plt.close(fig)
+            buffer.seek(0)
+            overall_metrics_plot = base64.b64encode(buffer.read()).decode("utf-8")
+
     return render_template(
         "model_evaluation.html",
         title="Model Evaluation",
@@ -675,46 +612,44 @@ def model_evaluation() -> str:
         search_results=search_results,
         search_params=search_params,
         interesting_abs=interesting_abs,
-        interesting_pct=interesting_pct
+        interesting_pct=interesting_pct,
+        interesting_abs_plot=interesting_abs_plot,
+        interesting_pct_plot=interesting_pct_plot,
+        overall_metrics_plot=overall_metrics_plot,
+        top_under_valued_table=top_under_valued_table,
+        top_over_valued_table=top_over_valued_table,
+        interesting_under_plot=interesting_under_plot,
+        interesting_over_plot=interesting_over_plot,
+        error_dist_plot=error_dist_plot,
+        scatter_plot=scatter_plot
     )
 
 
 @app.route("/run_all", methods=["GET", "POST"])
 def run_all() -> str:
-    """
-    Execute the complete pipeline: web scraping, data preprocessing, player value update,
-    and model training.
-
-    Returns:
-        str: Rendered HTML for the full pipeline page or a redirect response.
-    """
     if request.method == "POST":
         steps = [
             (["python", "./preprocessing/web_scrape.py"], "Web scraping"),
             (["python", "./preprocessing/preprocessing.py"], "Preprocessing"),
             (["python", "./preprocessing/player_value.py"], "Player value update"),
-            (["python", "./models/linear_regression_model.py"], "Linear Regression model training"),
-            (["python", "./models/random_forest_model.py"], "Random Forest model training"),
-            (["python", "./models/xgboost_model.py"], "Random Forest model training")
+            (["python", "./models/linear_regression_model.py"], "Linear Regression training"),
+            (["python", "./models/random_forest_model.py"], "Random Forest training"),
+            (["python", "./models/xgboost_model.py"], "XGBoost training")
         ]
         for cmd, description in steps:
             if not run_command(cmd):
                 flash(f"{description} failed.", "danger")
-                logger.error(f"{description} failed.")
                 return redirect(url_for("run_all"))
             else:
-                flash(f"{description} completed successfully.", "success")
-        flash("Full pipeline executed successfully.", "success")
+                flash(f"{description} completed.", "success")
+        flash("Full pipeline executed.", "success")
         return redirect(url_for("index"))
     return render_template("run_all.html", title="Run Full Pipeline")
 
 
-# =============================================================================
-# Main Execution
-# =============================================================================
 if __name__ == "__main__":
     if not start_local_api():
-        logger.error("Failed to start local API server. Some functionality may be unavailable.")
+        logger.error("Failed to start local API server.")
     if os.environ.get("WERKZEUG_RUN_MAIN") == "true":
         webbrowser.open("http://127.0.0.1:5000/", new=0)
     app.run(debug=True)

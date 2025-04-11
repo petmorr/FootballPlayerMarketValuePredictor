@@ -1,75 +1,73 @@
 {% extends "base.html" %}
-
 {% block title %}Manual Transfer Value Input{% endblock %}
 
 {% block content %}
-<div class="mt-3 container">
-    <h2>Manual Transfer Value Input</h2>
-    <p>
-        For each player missing a transfer value, please review the details below. Each section represents a dataset
-        (League_Season).
-        Verify the details and enter the correct Transfermarkt value in the provided field.
-        It is important that you fill all of these out and confirm they are accurate in order for the model to be as
-        accurate as possible.
-        <br>
-    </p>
-    <form method="POST">
-        {% for dataset, entries in grouped_missing.items() %}
-        <div class="card mb-4">
-            <div class="card-header">
-                <strong>{{ dataset }}</strong>
-            </div>
-            <div class="card-body">
-                <table class="table table-bordered">
-                    <thead class="thead-light">
-                    <tr>
-                        <th>Season</th>
-                        <th>Player Name</th>
-                        <th>Team</th>
-                        <th>Market Value Date</th>
-                        <th>Current Value</th>
-                        <th>Manual Transfer Value</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    {% for entry in entries %}
-                    <tr>
-                        <td>
-                            <input name="season" type="hidden" value="{{ entry.season }}">
-                            {{ entry.season }}
-                        </td>
-                        <td>
-                            <input name="player" type="hidden" value="{{ entry.player }}">
-                            {{ entry.player }}
-                        </td>
-                        <td>
-                            <input name="team" type="hidden" value="{{ entry.team }}">
-                            {{ entry.team }}
-                        </td>
-                        <td>
-                            <input name="closest_date" type="hidden" value="{{ entry.closest_date }}">
-                            {% if entry.closest_date and entry.closest_date != "N/A" %}
-                            {{ entry.closest_date }}
-                            {% else %}
-                            April–July {{ entry.season.split('-')[-1] }}
-                            {% endif %}
-                        </td>
-                        <td>
-                            {{ entry.current_value if entry.current_value and entry.current_value != "N/A" else "N/A" }}
-                        </td>
-                        <td>
-                            <input class="form-control" name="manual_value" placeholder="Enter transfer value"
-                                   step="0.01" type="number">
-                        </td>
-                        <input name="dataset" type="hidden" value="{{ entry.dataset }}">
-                    </tr>
-                    {% endfor %}
-                    </tbody>
-                </table>
-            </div>
+<h2>Manual Transfer Value Input</h2>
+<p>
+    Review each dataset and fill in transfer values for missing entries. Accurate inputs improve the model's
+    performance.
+</p>
+<form method="POST">
+    {% for dataset, entries in grouped_missing.items() %}
+    <div class="card mb-4">
+        <div class="card-header">
+            <strong>{{ dataset }}</strong>
         </div>
-        {% endfor %}
-        <button class="btn btn-primary" type="submit">Submit Manual Inputs</button>
-    </form>
-</div>
+        <div class="card-body table-responsive">
+            <table class="table table-bordered">
+                <thead class="table-light">
+                <tr>
+                    <th>Season</th>
+                    <th>Player Name</th>
+                    <th>Team</th>
+                    <th>Market Value Date</th>
+                    <th>Current Value</th>
+                    <th>Manual Transfer Value</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for entry in entries %}
+                <tr>
+                    <td>
+                        <input name="season" type="hidden" value="{{ entry.season }}">
+                        {{ entry.season }}
+                    </td>
+                    <td>
+                        <input name="player" type="hidden" value="{{ entry.player }}">
+                        {{ entry.player }}
+                    </td>
+                    <td>
+                        <input name="team" type="hidden" value="{{ entry.team }}">
+                        {{ entry.team }}
+                    </td>
+                    <td>
+                        <input name="closest_date" type="hidden" value="{{ entry.closest_date }}">
+                        {% if entry.closest_date and entry.closest_date != "N/A" %}
+                        {{ entry.closest_date }}
+                        {% else %}
+                        Approx. {{ entry.season.split('-')[-1] }}
+                        {% endif %}
+                    </td>
+                    <td>
+                        {{ entry.current_value if entry.current_value != "N/A" else "N/A" }}
+                    </td>
+                    <td>
+                        <input
+                                class="form-control"
+                                name="manual_value"
+                                placeholder="Enter value"
+                                step="0.01"
+                                type="number"
+                        >
+                    </td>
+                    <input name="dataset" type="hidden" value="{{ entry.dataset }}">
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endfor %}
+    <button class="btn btn-primary" type="submit">Submit Manual Inputs</button>
+</form>
 {% endblock %}

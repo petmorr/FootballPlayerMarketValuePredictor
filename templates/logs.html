@@ -2,16 +2,34 @@
 {% block title %}Application Logs{% endblock %}
 
 {% block content %}
-<div class="mt-3">
+<div>
     <h2>Application Logs</h2>
-    <p>This page displays logs from various parts of the application. The page auto-refreshes every 5 seconds.</p>
+    <p>
+        This page displays logs from various parts of the application. The page can auto-refresh
+        if you wish to keep updated.
+    </p>
+
+    <div class="form-check form-switch mb-3">
+        <input
+                checked
+                class="form-check-input"
+                id="autoRefreshSwitch"
+                type="checkbox"
+        />
+        <label class="form-check-label" for="autoRefreshSwitch">
+            Auto-refresh every 5 seconds
+        </label>
+    </div>
+
     {% for log_name, log_text in logs.items() %}
     <div class="card mb-4">
         <div class="card-header">
             <strong>{{ log_name }} Logs</strong>
         </div>
         <div class="card-body">
-            <pre style="background: #000; color: #0f0; padding: 1em; height: 300px; overflow-y: scroll;">{{ log_text }}</pre>
+            <div class="scrollable-logs">
+                {{ log_text }}
+            </div>
         </div>
     </div>
     {% endfor %}
@@ -20,9 +38,17 @@
 
 {% block scripts %}
 <script>
-    // Auto-refresh every 5 seconds.
-    setInterval(function () {
-        window.location.reload();
+    const autoRefreshSwitch = document.getElementById('autoRefreshSwitch');
+    let autoRefreshEnabled = true;
+
+    autoRefreshSwitch.addEventListener('change', function () {
+        autoRefreshEnabled = this.checked;
+    });
+
+    setInterval(() => {
+        if (autoRefreshEnabled) {
+            window.location.reload();
+        }
     }, 5000);
 </script>
 {% endblock %}

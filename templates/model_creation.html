@@ -2,22 +2,19 @@
 {% block title %}Model Creation{% endblock %}
 
 {% block content %}
-<div class="mt-3">
-    <h2>Model Creation</h2>
-    <p>
-        This section will allow you to select and tune machine learning models for predicting player market values.
-        (Functionality is under development.)
-    </p>
-    <form method="POST">
-        <div class="form-group">
-            <label for="model_choice">Select Model:</label>
-            <select class="form-control" id="model_choice" name="model_choice">
-                <option value="LinearRegression">Linear Regression</option>
-                <option value="RandomForest">Random Forest</option>
-                <option value="XGBoost">XGBoost</option>
-            </select>
-        </div>
-        <button class="btn btn-primary" type="submit">Create/Select Model</button>
-    </form>
-</div>
+<h2>Model Creation</h2>
+<p>
+    Select and train a machine learning model (Linear Regression, Random Forest, or XGBoost).
+</p>
+<form class="w-50" method="POST">
+    <div class="form-group mb-3">
+        <label class="form-label" for="model_choice">Select Model:</label>
+        <select class="form-select" id="model_choice" name="model_choice">
+            <option value="LinearRegression">Linear Regression</option>
+            <option value="RandomForest">Random Forest</option>
+            <option value="XGBoost">XGBoost</option>
+        </select>
+    </div>
+    <button class="btn btn-primary" type="submit">Create/Select Model</button>
+</form>
 {% endblock %}

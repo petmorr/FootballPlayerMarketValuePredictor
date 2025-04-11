@@ -2,19 +2,66 @@
 {% block title %}Home - Peter Morris Honours Project{% endblock %}
 
 {% block content %}
-<div class="jumbotron">
-    <h1 class="display-4">Welcome to my Honours Project!</h1>
+<div class="hero mb-4">
+    <h1 class="display-4">Welcome to My Honours Project</h1>
     <p class="lead">
-        This project aims to create a machine learning model to determine a player's market value based on performance
-        data.
+        This project uses machine learning to estimate a player's market value from performance data.
     </p>
-    <hr class="my-4">
-    <p>Use the navigation bar above to access the various functionalities:</p>
-    <ul>
-        <li><a href="{{ url_for('model_preprocessing') }}">Model Preprocessing</a></li>
-        <li><a href="{{ url_for('model_creation') }}">Model Creation</a></li>
-        <li><a href="{{ url_for('model_evaluation') }}">Model Evaluation</a></li>
-        <li><a href="{{ url_for('manual_input') }}">Manual Transfer Value Input</a></li>
-    </ul>
+</div>
+
+<div class="row g-3">
+    <div class="col-md-6">
+        <div class="card text-center">
+            <div class="card-header">Model Preprocessing</div>
+            <div class="card-body">
+                <p class="card-text">
+                    Gather data, run web scraping, and handle missing values to prepare data for modeling.
+                </p>
+                <a class="btn btn-primary" href="{{ url_for('model_preprocessing') }}">
+                    Go
+                </a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card text-center">
+            <div class="card-header">Model Creation</div>
+            <div class="card-body">
+                <p class="card-text">
+                    Select and train a machine learning model (e.g., Linear Regression, Random Forest, XGBoost).
+                </p>
+                <a class="btn btn-primary" href="{{ url_for('model_creation') }}">
+                    Go
+                </a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card text-center">
+            <div class="card-header">Model Evaluation</div>
+            <div class="card-body">
+                <p class="card-text">
+                    View model performance metrics, compare predictions vs. actual market values, and see interesting
+                    finds.
+                </p>
+                <a class="btn btn-primary" href="{{ url_for('model_evaluation') }}">
+                    Go
+                </a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card text-center">
+            <div class="card-header">Manual Input</div>
+            <div class="card-body">
+                <p class="card-text">
+                    Manually provide missing transfer values to improve accuracy.
+                </p>
+                <a class="btn btn-primary" href="{{ url_for('manual_input') }}">
+                    Go
+                </a>
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}
