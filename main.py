@@ -11,14 +11,12 @@ import matplotlib
 import numpy as np
 import pandas as pd
 import requests
+from flask import Flask, render_template, request, redirect, url_for, flash
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from flask import Flask, render_template, request, redirect, url_for, flash
-
 from logging_config import configure_logger
-
 
 def ensure_module(module_name: str, package_name: str = None) -> None:
     """Ensures a Python module is installed."""
@@ -30,6 +28,7 @@ def ensure_module(module_name: str, package_name: str = None) -> None:
         __import__(module_name)
 
 
+# Ensure required modules
 ensure_module("bs4", "beautifulsoup4")
 
 logger = configure_logger("web_portal", "web_portal.log")
@@ -37,6 +36,9 @@ app = Flask(__name__)
 app.secret_key = "replace_with_secret_key"
 
 
+# -----------------------------------------------------------------------------
+# API Server Checks & Startup
+# -----------------------------------------------------------------------------
 def check_api_running() -> bool:
     """Checks if the local API server is running."""
     try:
@@ -44,7 +46,6 @@ def check_api_running() -> bool:
         return response.status_code == 200
     except Exception:
         return False
-
 
 def start_local_api() -> bool:
     """Starts the local API server if not already running."""
@@ -86,7 +87,6 @@ def start_local_api() -> bool:
         logger.error(f"Error starting API server: {e}")
         return False
 
-
 @app.before_request
 def run_preprocessing_once() -> None:
     """Ensures the API server is started once before handling requests."""
@@ -98,6 +98,9 @@ def run_preprocessing_once() -> None:
         app.config["PREPROCESSING_DONE"] = True
 
 
+# -----------------------------------------------------------------------------
+# Command Execution & Log Reading Helpers
+# -----------------------------------------------------------------------------
 def run_command(command: list) -> bool:
     """Runs a command in a subprocess."""
     cwd = None
@@ -117,7 +120,6 @@ def run_command(command: list) -> bool:
         logger.error(f"Command failed: {e}")
         return False
 
-
 def read_log_file(file_path: Path) -> str:
     """Reads a log file with latin1 encoding."""
     if not file_path.exists():
@@ -129,6 +131,9 @@ def read_log_file(file_path: Path) -> str:
         return f"Error reading log file: {e}"
 
 
+# -----------------------------------------------------------------------------
+# Missing Transfer Values & Updating Parquet
+# -----------------------------------------------------------------------------
 def load_missing_transfer_values() -> list:
     """Loads missing market value entries from parquet files."""
     missing_entries = []
@@ -179,7 +184,6 @@ def load_missing_transfer_values() -> list:
             missing_entries.append(entry)
     return missing_entries
 
-
 def group_missing_entries(missing_entries: list) -> dict:
     """Groups missing entries by dataset."""
     grouped = {}
@@ -187,7 +191,6 @@ def group_missing_entries(missing_entries: list) -> dict:
         ds = entry["dataset"]
         grouped.setdefault(ds, []).append(entry)
     return grouped
-
 
 def update_transfer_value_in_parquet(dataset: str, season: str, updates: list) -> bool:
     """Updates the parquet files with new market values."""
@@ -223,10 +226,12 @@ def update_transfer_value_in_parquet(dataset: str, season: str, updates: list) -
     return True
 
 
+# -----------------------------------------------------------------------------
+# Flask Routes
+# -----------------------------------------------------------------------------
 @app.route("/")
 def index() -> str:
     return render_template("index.html", title="Home")
-
 
 @app.route("/logs")
 def view_logs() -> str:
@@ -240,7 +245,6 @@ def view_logs() -> str:
     }
     logs_content = {name: read_log_file(path) for name, path in log_files.items()}
     return render_template("logs.html", logs=logs_content)
-
 
 @app.route("/model_preprocessing", methods=["GET", "POST"])
 def model_preprocessing() -> str:
@@ -268,7 +272,6 @@ def model_preprocessing() -> str:
             flash("No missing transfer values.", "success")
             return redirect(url_for("index"))
     return render_template("model_preprocessing.html", title="Model Preprocessing")
-
 
 @app.route("/manual_input", methods=["GET", "POST"])
 def manual_input() -> str:
@@ -305,7 +308,6 @@ def manual_input() -> str:
         group_missing = group_missing_entries(missing_entries)
         return render_template("manual_input.html", grouped_missing=group_missing, title="Manual Transfer Value Input")
 
-
 @app.route("/model_creation", methods=["GET", "POST"])
 def model_creation() -> str:
     if request.method == "POST":
@@ -331,13 +333,15 @@ def model_creation() -> str:
     return render_template("model_creation.html", title="Model Creation")
 
 
+# -----------------------------------------------------------------------------
+# Shared Helper for Predicted Files
+# -----------------------------------------------------------------------------
 def safe_relative_path(file_path: Path, base: Path) -> str:
     """Computes relative path if possible."""
     try:
         return str(file_path.relative_to(base))
     except ValueError:
         return str(file_path)
-
 
 def parse_predicted_file_details(file_path: Path, base: Path) -> dict:
     """Extracts details from a predicted file's path."""
@@ -370,8 +374,10 @@ def parse_predicted_file_details(file_path: Path, base: Path) -> dict:
     }
 
 
+# -----------------------------------------------------------------------------
+# Plotting Helpers
+# -----------------------------------------------------------------------------
 def df_to_bar_base64_png(df: pd.DataFrame, x_col: str, y_col: str, title: str) -> str:
-    """Returns a base64-encoded PNG of a bar chart."""
     fig, ax = plt.subplots(figsize=(6, 4))
     ax.bar(df[x_col], df[y_col], color='skyblue')
     ax.set_title(title)
@@ -385,9 +391,7 @@ def df_to_bar_base64_png(df: pd.DataFrame, x_col: str, y_col: str, title: str) -
     buffer.seek(0)
     return base64.b64encode(buffer.read()).decode("utf-8")
 
-
 def df_to_dist_base64_png(series: pd.Series, title: str) -> str:
-    """Returns a base64-encoded PNG of a histogram distribution."""
     fig, ax = plt.subplots(figsize=(6, 4))
     ax.hist(series.dropna(), bins=15, color='orchid', edgecolor='black')
     ax.set_title(title)
@@ -400,13 +404,11 @@ def df_to_dist_base64_png(series: pd.Series, title: str) -> str:
     buffer.seek(0)
     return base64.b64encode(buffer.read()).decode("utf-8")
 
-
 def df_to_scatter_base64_png(df: pd.DataFrame, actual_col: str, pred_col: str, title: str) -> str:
-    """Returns a base64-encoded PNG of a scatter plot (actual vs. predicted)."""
     fig, ax = plt.subplots(figsize=(6, 4))
     ax.scatter(df[actual_col], df[pred_col], alpha=0.6, color='teal')
     max_val = max(df[actual_col].max(), df[pred_col].max())
-    ax.plot([0, max_val], [0, max_val], color='red', linestyle='--')
+    ax.plot([0, max_val], [0, max_val], 'r--')
     ax.set_title(title)
     ax.set_xlabel(actual_col)
     ax.set_ylabel(pred_col)
@@ -418,24 +420,32 @@ def df_to_scatter_base64_png(df: pd.DataFrame, actual_col: str, pred_col: str, t
     return base64.b64encode(buffer.read()).decode("utf-8")
 
 
+# -----------------------------------------------------------------------------
+# Enhanced Model Evaluation Route
+# -----------------------------------------------------------------------------
 @app.route("/model_evaluation", methods=["GET", "POST"])
 def model_evaluation() -> str:
+    """
+    Enhanced model evaluation route with advanced charts and collapsible UI.
+    """
     lr_file = Path("models/results/performance_metrics_linear_regression.csv")
     rf_file = Path("models/results/performance_metrics_random_forest.csv")
     xgb_file = Path("models/results/performance_metrics_xgboost.csv")
 
-    metrics = {}
     model_metrics_map = {
         "Linear Regression": lr_file,
         "Random Forest": rf_file,
         "XGBoost": xgb_file
     }
+
+    metrics = {}
     combined_metrics = []
     for model_name, csv_file in model_metrics_map.items():
         if csv_file.exists():
             try:
                 df_m = pd.read_csv(csv_file)
-                metrics[model_name] = df_m.to_html(classes="table table-striped table-bordered", index=False)
+                # We won't display a table here since we replaced it with visual
+                # But we can store the DataFrame for reference or future expansions
                 row_data = {"Model": model_name}
                 for col in ["MAE", "MSE", "RMSE", "R2"]:
                     if col in df_m.columns:
@@ -443,23 +453,10 @@ def model_evaluation() -> str:
                 combined_metrics.append(row_data)
             except Exception as e:
                 logger.error(f"Error reading {model_name} metrics: {e}")
-                metrics[model_name] = f"Error: {e}"
-        else:
-            metrics[model_name] = "Metrics file not found."
+        # else: file not found, skip
 
-    predictions = {
-        "Linear Regression": {},
-        "Random Forest": {},
-        "XGBoost": {}
-    }
-
-    def insert_into_tree(details: dict) -> None:
-        m = details["model_name"]
-        fe = details["fe_variant"]
-        ls = details["league_season"]
-        link = details["link"]
-        predictions.setdefault(m, {}).setdefault(fe, {})[ls] = link
-
+    # Build predictions dictionary
+    predictions = {"Linear Regression": {}, "Random Forest": {}, "XGBoost": {}}
     base = Path.cwd()
     for pred_dir in [
         Path("data/predictions/linear_regression"),
@@ -470,8 +467,30 @@ def model_evaluation() -> str:
             for f in pred_dir.rglob("*"):
                 if f.is_file():
                     info = parse_predicted_file_details(f, base)
-                    insert_into_tree(info)
+                    predictions.setdefault(info["model_name"], {}).setdefault(info["fe_variant"], {})[
+                        info["league_season"]] = info["link"]
 
+    # Create an overall metrics bar chart for "MAE" if available
+    overall_metrics_plot = None
+    if combined_metrics:
+        df_combined = pd.DataFrame(combined_metrics)
+        if "MAE" in df_combined.columns:
+            df_combined = df_combined.sort_values("Model")
+            fig, ax = plt.subplots(figsize=(6, 4))
+            ax.bar(df_combined["Model"], df_combined["MAE"], color="salmon")
+            ax.set_title("Model Comparison (MAE)")
+            ax.set_xlabel("Model")
+            ax.set_ylabel("MAE")
+            plt.tight_layout()
+            buffer = BytesIO()
+            plt.savefig(buffer, format="png")
+            plt.close(fig)
+            buffer.seek(0)
+            overall_metrics_plot = base64.b64encode(buffer.read()).decode("utf-8")
+
+    # Initialize placeholders for advanced analysis
+    search_params = {}
+    search_results = None
     interesting_abs = None
     interesting_pct = None
     interesting_abs_plot = None
@@ -482,8 +501,8 @@ def model_evaluation() -> str:
     top_over_valued_table = None
     error_dist_plot = None
     scatter_plot = None
-    search_results = None
-    search_params = {}
+
+    # Handle form submission
     if request.method == "POST" and "search_term" in request.form:
         selected_model = request.form.get("model")
         selected_fe = request.form.get("fe_variant")
@@ -491,6 +510,7 @@ def model_evaluation() -> str:
         selected_season = request.form.get("season")
         view_type = request.form.get("view_type")
         search_term = request.form.get("search_term", "").strip().lower()
+
         search_params = {
             "model": selected_model,
             "fe_variant": selected_fe,
@@ -500,24 +520,22 @@ def model_evaluation() -> str:
             "search_term": search_term
         }
 
+        # Determine file path
         if view_type == "Raw":
             file_path = Path("data/updated") / selected_fe / f"updated_{selected_league}_{selected_season}.parquet"
         else:
             if selected_model == "Linear Regression":
-                file_path = (Path("data/predictions/linear_regression")
-                             / selected_fe
-                             / f"predicted_updated_{selected_league}_{selected_season}.parquet")
+                file_path = Path(
+                    "data/predictions/linear_regression") / selected_fe / f"predicted_updated_{selected_league}_{selected_season}.parquet"
             elif selected_model == "Random Forest":
-                file_path = (Path("data/predictions/random_forest")
-                             / selected_fe
-                             / f"predicted_updated_{selected_league}_{selected_season}.parquet")
+                file_path = Path(
+                    "data/predictions/random_forest") / selected_fe / f"predicted_updated_{selected_league}_{selected_season}.parquet"
             elif selected_model in ("XGBoost", "XG Boost"):
-                file_path = (Path("data/predictions/xgboost")
-                             / selected_fe
-                             / f"predicted_updated_{selected_league}_{selected_season}.parquet")
+                file_path = Path(
+                    "data/predictions/xgboost") / selected_fe / f"predicted_updated_{selected_league}_{selected_season}.parquet"
                 if not file_path.exists():
-                    file_path = (Path("data/predictions/xgboost")
-                                 / f"predicted_updated_{selected_league}_{selected_season}.parquet")
+                    file_path = Path(
+                        "data/predictions/xgboost") / f"predicted_updated_{selected_league}_{selected_season}.parquet"
             else:
                 file_path = None
 
@@ -529,6 +547,7 @@ def model_evaluation() -> str:
                 df = pd.read_parquet(file_path)
                 if search_term:
                     df = df[df["player"].str.lower().str.contains(search_term)]
+                # Prepare table view
                 cols = ["player", "position", "squad", "Market Value", "predicted_market_value"]
                 keep_cols = [c for c in cols if c in df.columns]
                 df = df[keep_cols]
@@ -536,26 +555,27 @@ def model_evaluation() -> str:
                     df.rename(columns={"predicted_market_value": "Predicted Price"}, inplace=True)
                 search_results = df.to_html(classes="table table-striped table-bordered", index=False)
 
+                # Advanced analysis
                 if "Market Value" in df.columns and "Predicted Price" in df.columns:
                     df["Absolute Difference"] = (df["Predicted Price"] - df["Market Value"]).abs()
                     df["Error"] = df["Predicted Price"] - df["Market Value"]
                     df["Percentage Difference"] = df.apply(
-                        lambda row: ((row["Predicted Price"] - row["Market Value"])
-                                     / row["Market Value"] * 100)
-                        if row["Market Value"] != 0 else np.nan, axis=1
-                    ).abs()
+                        lambda row: abs((row["Predicted Price"] - row["Market Value"]) / row["Market Value"] * 100)
+                        if row["Market Value"] != 0 else np.nan,
+                        axis=1
+                    )
 
                     top_abs = df.nlargest(5, "Absolute Difference").copy()
-                    interesting_abs = top_abs.to_html(classes="table table-striped table-bordered", index=False)
                     if not top_abs.empty:
+                        interesting_abs = top_abs.to_html(classes="table table-striped table-bordered", index=False)
                         top_abs["player"] = top_abs["player"].astype(str)
                         interesting_abs_plot = df_to_bar_base64_png(
                             top_abs, "player", "Absolute Difference", "Top 5 Absolute Diff"
                         )
 
                     top_pct = df.nlargest(5, "Percentage Difference").copy()
-                    interesting_pct = top_pct.to_html(classes="table table-striped table-bordered", index=False)
                     if not top_pct.empty:
+                        interesting_pct = top_pct.to_html(classes="table table-striped table-bordered", index=False)
                         top_pct["player"] = top_pct["player"].astype(str)
                         interesting_pct_plot = df_to_bar_base64_png(
                             top_pct, "player", "Percentage Difference", "Top 5 Percentage Diff"
@@ -563,7 +583,6 @@ def model_evaluation() -> str:
 
                     df_neg = df[df["Error"] < 0].nsmallest(5, "Error").copy()
                     if not df_neg.empty:
-                        df_neg["player"] = df_neg["player"].astype(str)
                         top_under_valued_table = df_neg.to_html(classes="table table-striped table-bordered",
                                                                 index=False)
                         interesting_under_plot = df_to_bar_base64_png(
@@ -572,42 +591,27 @@ def model_evaluation() -> str:
 
                     df_pos = df[df["Error"] > 0].nlargest(5, "Error").copy()
                     if not df_pos.empty:
-                        df_pos["player"] = df_pos["player"].astype(str)
                         top_over_valued_table = df_pos.to_html(classes="table table-striped table-bordered",
                                                                index=False)
                         interesting_over_plot = df_to_bar_base64_png(
                             df_pos, "player", "Error", "Top 5 Over-Valued (Positive Error)"
                         )
 
+                    # Distribution and scatter
                     error_dist_plot = df_to_dist_base64_png(df["Error"], "Distribution of Error")
+                    scatter_plot = df_to_scatter_base64_png(
+                        df, "Market Value", "Predicted Price", "Market Value vs. Predicted Price"
+                    )
 
-                    scatter_plot = df_to_scatter_base64_png(df, "Market Value", "Predicted Price",
-                                                            "Market Value vs. Predicted Price")
             except Exception as e:
                 flash(f"Error loading data: {e}", "danger")
                 search_results = f"Error: {e}"
 
-    overall_metrics_plot = None
-    if combined_metrics:
-        combined_df = pd.DataFrame(combined_metrics)
-        if "MAE" in combined_df.columns:
-            combined_df = combined_df.sort_values("Model")
-            fig, ax = plt.subplots(figsize=(6, 4))
-            ax.bar(combined_df["Model"], combined_df["MAE"], color="salmon")
-            ax.set_title("Model Comparison (MAE)")
-            ax.set_xlabel("Model")
-            ax.set_ylabel("MAE")
-            plt.tight_layout()
-            buffer = BytesIO()
-            plt.savefig(buffer, format="png")
-            plt.close(fig)
-            buffer.seek(0)
-            overall_metrics_plot = base64.b64encode(buffer.read()).decode("utf-8")
-
     return render_template(
         "model_evaluation.html",
         title="Model Evaluation",
-        metrics=metrics,
+        # We removed old metrics table references and replaced with a single bar chart
+        metrics={},  # or an empty dict if you're no longer showing text-based metrics
         predictions=predictions,
         search_results=search_results,
         search_params=search_params,
@@ -623,7 +627,6 @@ def model_evaluation() -> str:
         error_dist_plot=error_dist_plot,
         scatter_plot=scatter_plot
     )
-
 
 @app.route("/run_all", methods=["GET", "POST"])
 def run_all() -> str:
