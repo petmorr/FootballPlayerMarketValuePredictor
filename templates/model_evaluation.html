@@ -10,12 +10,8 @@
         {% if performance_metrics_plot %}
         <div class="accordion-item">
             <h2 class="accordion-header" id="headingMetrics">
-                <button class="accordion-button collapsed"
-                        type="button"
-                        aria-controls="collapseMetrics"
-                        aria-expanded="false"
-                        data-bs-target="#collapseMetrics"
-                        data-bs-toggle="collapse">
+                <button aria-controls="collapseMetrics" aria-expanded="false" class="accordion-button collapsed"
+                        data-bs-target="#collapseMetrics" data-bs-toggle="collapse" type="button">
                     Model Performance Metrics
                 </button>
             </h2>
@@ -32,12 +28,9 @@
         <!-- Explanation of Calculations -->
         <div class="accordion-item">
             <h2 class="accordion-header" id="headingCalculations">
-                <button class="accordion-button collapsed"
-                        type="button"
-                        aria-controls="collapseCalculations"
-                        aria-expanded="false"
-                        data-bs-target="#collapseCalculations"
-                        data-bs-toggle="collapse">
+                <button aria-controls="collapseCalculations" aria-expanded="false" class="accordion-button collapsed"
+                        data-bs-target="#collapseCalculations" data-bs-toggle="collapse"
+                        type="button">
                     Explanation of Calculations
                 </button>
             </h2>
@@ -53,24 +46,22 @@
                     <p>
                         <strong>Percentage Difference (Pct Diff):</strong><br>
                         <em>Formula:</em> (|Actual − Predicted| / Actual) × 100%<br>
-                        This provides a relative error based on the actual value, which is useful when values vary
-                        greatly.
+                        Provides a relative error based on the actual value, which is useful when values vary greatly.
                     </p>
                     <p>
                         <strong>Mean Squared Error (MSE):</strong><br>
                         <em>Formula:</em> (1/n) Σ (Actual − Predicted)²<br>
-                        This penalizes larger errors more strongly and provides a measure of average error power.
+                        Penalizes larger errors more strongly and gives an average error measure.
                     </p>
                     <p>
                         <strong>Root Mean Squared Error (RMSE):</strong><br>
                         <em>Formula:</em> √MSE<br>
-                        RMSE is on the same scale as the target variable, making it easier to interpret.
+                        On the same scale as the target variable; lower RMSE indicates better predictions.
                     </p>
                     <p>
                         <strong>R-Squared (R²):</strong><br>
                         <em>Formula:</em> 1 - [Σ (Actual − Predicted)² / Σ (Actual − Actual_mean)²]<br>
-                        Represents the proportion of variance explained by the model; values closer to 1 indicate a
-                        better fit.
+                        Indicates the proportion of variance explained by the model; values closer to 1 are better.
                     </p>
                 </div>
             </div>
@@ -79,12 +70,8 @@
         <!-- Search Form -->
         <div class="accordion-item">
             <h2 class="accordion-header" id="headingSearchForm">
-                <button class="accordion-button"
-                        type="button"
-                        aria-controls="collapseSearchForm"
-                        aria-expanded="true"
-                        data-bs-target="#collapseSearchForm"
-                        data-bs-toggle="collapse">
+                <button aria-controls="collapseSearchForm" aria-expanded="true" class="accordion-button"
+                        data-bs-target="#collapseSearchForm" data-bs-toggle="collapse" type="button">
                     Search Player Data
                 </button>
             </h2>
@@ -92,20 +79,19 @@
                  id="collapseSearchForm">
                 <div class="accordion-body">
                     <form method="POST">
-                        {# If you need CSRF protection with Flask-WTF, include your token here, e.g., {{ form.csrf_token
-                        }} #}
+                        {# Uncomment the following line if you use CSRF protection via Flask-WTF #}
+                        {# {{ form.csrf_token }} #}
                         <div class="row">
                             <!-- Model Selection -->
                             <div class="col-md-2">
                                 <div class="mb-3">
                                     <label class="form-label" for="model">Model</label>
                                     <select class="form-select" id="model" name="model">
-                                        <option if search_params.model== value="Linear Regression" {%
-                                        "Linear Regression" %}selected{% endif %}>Linear Regression</option>
-                                        <option if search_params.model== value="Random Forest" {%
-                                        "Random Forest" %}selected{% endif %}>Random Forest</option>
-                                        <option if search_params.model== value="XGBoost" {%
-                                        "XGBoost" %}selected{% endif %}>XGBoost</option>
+                                        {% for option in ["Linear Regression", "Random Forest", "XGBoost"] %}
+                                        <option %} %} endif if option search_params.model== selected{%
+                                                value="{{ option }}" {%>{{ option }}
+                                        </option>
+                                        {% endfor %}
                                     </select>
                                 </div>
                             </div>
@@ -115,12 +101,13 @@
                                 <div class="mb-3">
                                     <label class="form-label" for="fe_variant">Feature Eng.</label>
                                     <select class="form-select" id="fe_variant" name="fe_variant">
-                                        <option if search_params.fe_variant== value="enhanced_feature_engineering" {%
-                                        "enhanced_feature_engineering" %}selected{% endif %}>Enhanced</option>
-                                        <option if search_params.fe_variant== value="feature_engineering" {%
-                                        "feature_engineering" %}selected{% endif %}>Basic</option>
-                                        <option if search_params.fe_variant== value="no_feature_engineering" {%
-                                        "no_feature_engineering" %}selected{% endif %}>None</option>
+                                        {% set fe_options = [("enhanced_feature_engineering", "Enhanced"),
+                                        ("feature_engineering", "Basic"), ("no_feature_engineering", "None")] %}
+                                        {% for value, label in fe_options %}
+                                        <option %} %} endif if search_params.fe_variant== selected{% value="{{ value }}"
+                                                value {%>{{ label }}
+                                        </option>
+                                        {% endfor %}
                                     </select>
                                 </div>
                             </div>
@@ -130,16 +117,12 @@
                                 <div class="mb-3">
                                     <label class="form-label" for="league">League</label>
                                     <select class="form-select" id="league" name="league">
-                                        <option if search_params.league== value="Premier-League" {%
-                                        "Premier-League" %}selected{% endif %}>Premier-League</option>
-                                        <option if search_params.league== value="La-Liga" {%
-                                        "La-Liga" %}selected{% endif %}>La-Liga</option>
-                                        <option if search_params.league== value="Bundesliga" {%
-                                        "Bundesliga" %}selected{% endif %}>Bundesliga</option>
-                                        <option if search_params.league== value="Ligue-1" {%
-                                        "Ligue-1" %}selected{% endif %}>Ligue-1</option>
-                                        <option if search_params.league== value="Serie-A" {%
-                                        "Serie-A" %}selected{% endif %}>Serie-A</option>
+                                        {% for option in ["Premier-League", "La-Liga", "Bundesliga", "Ligue-1",
+                                        "Serie-A"] %}
+                                        <option %} %} endif if option search_params.league== selected{%
+                                                value="{{ option }}" {%>{{ option }}
+                                        </option>
+                                        {% endfor %}
                                     </select>
                                 </div>
                             </div>
@@ -149,16 +132,12 @@
                                 <div class="mb-3">
                                     <label class="form-label" for="season">Season</label>
                                     <select class="form-select" id="season" name="season">
-                                        <option if search_params.season== value="2019-2020" {%
-                                        "2019-2020" %}selected{% endif %}>2019-2020</option>
-                                        <option if search_params.season== value="2020-2021" {%
-                                        "2020-2021" %}selected{% endif %}>2020-2021</option>
-                                        <option if search_params.season== value="2021-2022" {%
-                                        "2021-2022" %}selected{% endif %}>2021-2022</option>
-                                        <option if search_params.season== value="2022-2023" {%
-                                        "2022-2023" %}selected{% endif %}>2022-2023</option>
-                                        <option if search_params.season== value="2023-2024" {%
-                                        "2023-2024" %}selected{% endif %}>2023-2024</option>
+                                        {% for option in ["2019-2020", "2020-2021", "2021-2022", "2022-2023",
+                                        "2023-2024"] %}
+                                        <option %} %} endif if option search_params.season== selected{%
+                                                value="{{ option }}" {%>{{ option }}
+                                        </option>
+                                        {% endfor %}
                                     </select>
                                 </div>
                             </div>
@@ -168,10 +147,11 @@
                                 <div class="mb-3">
                                     <label class="form-label" for="view_type">View</label>
                                     <select class="form-select" id="view_type" name="view_type">
-                                        <option if search_params.view_type== value="Raw" {%
-                                        "Raw" %}selected{% endif %}>Raw</option>
-                                        <option if search_params.view_type== value="Predicted" {%
-                                        "Predicted" %}selected{% endif %}>Predicted</option>
+                                        {% for option in ["Raw", "Predicted"] %}
+                                        <option %} %} endif if option search_params.view_type==
+                                                selected{% value="{{ option }}" {%>{{ option }}
+                                        </option>
+                                        {% endfor %}
                                     </select>
                                 </div>
                             </div>
@@ -181,7 +161,8 @@
                         <div class="mb-3">
                             <label class="form-label" for="search_term">Player Name:</label>
                             <input class="form-control" id="search_term" name="search_term" placeholder="e.g., Cole Palmer"
-                                   type="text" value="{{ search_params.search_term|default('') }}">
+                                   type="text"
+                                   value="{{ search_params.search_term|default('') }}">
                         </div>
                         <button class="btn btn-primary" type="submit">Search</button>
                     </form>
@@ -343,7 +324,8 @@
         <div class="accordion-item">
             <h2 class="accordion-header" id="headingResidualPred">
                 <button aria-controls="collapseResidualPred" aria-expanded="false" class="accordion-button collapsed"
-                        data-bs-target="#collapseResidualPred" data-bs-toggle="collapse" type="button">
+                        data-bs-target="#collapseResidualPred" data-bs-toggle="collapse"
+                        type="button">
                     Residual vs Predicted
                 </button>
             </h2>
@@ -362,7 +344,8 @@
         <div class="accordion-item">
             <h2 class="accordion-header" id="headingResidualActual">
                 <button aria-controls="collapseResidualActual" aria-expanded="false" class="accordion-button collapsed"
-                        data-bs-target="#collapseResidualActual" data-bs-toggle="collapse" type="button">
+                        data-bs-target="#collapseResidualActual" data-bs-toggle="collapse"
+                        type="button">
                     Residual vs Actual
                 </button>
             </h2>
@@ -398,7 +381,8 @@
         <div class="accordion-item">
             <h2 class="accordion-header" id="headingPredictionFiles">
                 <button aria-controls="collapsePredictionFiles" aria-expanded="false" class="accordion-button collapsed"
-                        data-bs-target="#collapsePredictionFiles" data-bs-toggle="collapse" type="button">
+                        data-bs-target="#collapsePredictionFiles" data-bs-toggle="collapse"
+                        type="button">
                     Predicted Price Files
                 </button>
             </h2>
