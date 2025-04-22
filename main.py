@@ -30,6 +30,7 @@ def ensure_module(module_name: str, package_name: str = None) -> None:
 
 # Ensure required modules
 ensure_module("bs4", "beautifulsoup4")
+# Weird fix, wouldn't run without specfically checking this
 
 logger = configure_logger("web_portal", "web_portal.log")
 app = Flask(__name__)

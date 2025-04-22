@@ -25,48 +25,6 @@
         </div>
         {% endif %}
 
-        <!-- Explanation of Calculations -->
-        <div class="accordion-item">
-            <h2 class="accordion-header" id="headingCalculations">
-                <button aria-controls="collapseCalculations" aria-expanded="false" class="accordion-button collapsed"
-                        data-bs-target="#collapseCalculations" data-bs-toggle="collapse"
-                        type="button">
-                    Explanation of Calculations
-                </button>
-            </h2>
-            <div aria-labelledby="headingCalculations" class="accordion-collapse collapse" data-bs-parent="#evaluationAccordion"
-                 id="collapseCalculations">
-                <div class="accordion-body">
-                    <p>
-                        <strong>Absolute Difference (Abs Diff):</strong><br>
-                        <em>Formula:</em> |Actual − Predicted|<br>
-                        This measures the raw error between the actual and predicted values. Smaller differences
-                        indicate higher accuracy.
-                    </p>
-                    <p>
-                        <strong>Percentage Difference (Pct Diff):</strong><br>
-                        <em>Formula:</em> (|Actual − Predicted| / Actual) × 100%<br>
-                        Provides a relative error based on the actual value, which is useful when values vary greatly.
-                    </p>
-                    <p>
-                        <strong>Mean Squared Error (MSE):</strong><br>
-                        <em>Formula:</em> (1/n) Σ (Actual − Predicted)²<br>
-                        Penalizes larger errors more strongly and gives an average error measure.
-                    </p>
-                    <p>
-                        <strong>Root Mean Squared Error (RMSE):</strong><br>
-                        <em>Formula:</em> √MSE<br>
-                        On the same scale as the target variable; lower RMSE indicates better predictions.
-                    </p>
-                    <p>
-                        <strong>R-Squared (R²):</strong><br>
-                        <em>Formula:</em> 1 - [Σ (Actual − Predicted)² / Σ (Actual − Actual_mean)²]<br>
-                        Indicates the proportion of variance explained by the model; values closer to 1 are better.
-                    </p>
-                </div>
-            </div>
-        </div>
-
         <!-- Search Form -->
         <div class="accordion-item">
             <h2 class="accordion-header" id="headingSearchForm">
@@ -88,8 +46,9 @@
                                     <label class="form-label" for="model">Model</label>
                                     <select class="form-select" id="model" name="model">
                                         {% for option in ["Linear Regression", "Random Forest", "XGBoost"] %}
-                                        <option %} %} endif if option search_params.model== selected{%
-                                                value="{{ option }}" {%>{{ option }}
+                                        <option %} %}selected{% endif if option search_params.model==
+                                                value="{{ option }}" {%>
+                                            {{ option }}
                                         </option>
                                         {% endfor %}
                                     </select>
@@ -100,12 +59,16 @@
                             <div class="col-md-2">
                                 <div class="mb-3">
                                     <label class="form-label" for="fe_variant">Feature Eng.</label>
+                                    {% set fe_options = [
+                                    ("enhanced_feature_engineering", "Enhanced"),
+                                    ("feature_engineering", "Basic"),
+                                    ("no_feature_engineering", "None")
+                                    ] %}
                                     <select class="form-select" id="fe_variant" name="fe_variant">
-                                        {% set fe_options = [("enhanced_feature_engineering", "Enhanced"),
-                                        ("feature_engineering", "Basic"), ("no_feature_engineering", "None")] %}
                                         {% for value, label in fe_options %}
-                                        <option %} %} endif if search_params.fe_variant== selected{% value="{{ value }}"
-                                                value {%>{{ label }}
+                                        <option %} %}selected{% endif if search_params.fe_variant== value
+                                                value="{{ value }}" {%>
+                                            {{ label }}
                                         </option>
                                         {% endfor %}
                                     </select>
@@ -119,8 +82,9 @@
                                     <select class="form-select" id="league" name="league">
                                         {% for option in ["Premier-League", "La-Liga", "Bundesliga", "Ligue-1",
                                         "Serie-A"] %}
-                                        <option %} %} endif if option search_params.league== selected{%
-                                                value="{{ option }}" {%>{{ option }}
+                                        <option %} %}selected{% endif if option search_params.league==
+                                                value="{{ option }}" {%>
+                                            {{ option }}
                                         </option>
                                         {% endfor %}
                                     </select>
@@ -134,8 +98,9 @@
                                     <select class="form-select" id="season" name="season">
                                         {% for option in ["2019-2020", "2020-2021", "2021-2022", "2022-2023",
                                         "2023-2024"] %}
-                                        <option %} %} endif if option search_params.season== selected{%
-                                                value="{{ option }}" {%>{{ option }}
+                                        <option %} %}selected{% endif if option search_params.season==
+                                                value="{{ option }}" {%>
+                                            {{ option }}
                                         </option>
                                         {% endfor %}
                                     </select>
@@ -148,8 +113,9 @@
                                     <label class="form-label" for="view_type">View</label>
                                     <select class="form-select" id="view_type" name="view_type">
                                         {% for option in ["Raw", "Predicted"] %}
-                                        <option %} %} endif if option search_params.view_type==
-                                                selected{% value="{{ option }}" {%>{{ option }}
+                                        <option %} %}selected{% endif if option search_params.view_type==
+                                                value="{{ option }}" {%>
+                                            {{ option }}
                                         </option>
                                         {% endfor %}
                                     </select>
@@ -161,8 +127,7 @@
                         <div class="mb-3">
                             <label class="form-label" for="search_term">Player Name:</label>
                             <input class="form-control" id="search_term" name="search_term" placeholder="e.g., Cole Palmer"
-                                   type="text"
-                                   value="{{ search_params.search_term|default('') }}">
+                                   type="text" value="{{ search_params.search_term|default('') }}">
                         </div>
                         <button class="btn btn-primary" type="submit">Search</button>
                     </form>
@@ -229,54 +194,6 @@
                     </div>
                     {% if interesting_pct_plot %}
                     <img alt="Top Pct Diff" class="img-fluid" src="data:image/png;base64,{{ interesting_pct_plot }}">
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-        {% endif %}
-
-        <!-- Under-Valued -->
-        {% if top_under_valued_table %}
-        <div class="accordion-item">
-            <h2 class="accordion-header" id="headingUnderValued">
-                <button aria-controls="collapseUnderValued" aria-expanded="false" class="accordion-button collapsed"
-                        data-bs-target="#collapseUnderValued" data-bs-toggle="collapse" type="button">
-                    Top 5 Under-Valued
-                </button>
-            </h2>
-            <div aria-labelledby="headingUnderValued" class="accordion-collapse collapse" data-bs-parent="#evaluationAccordion"
-                 id="collapseUnderValued">
-                <div class="accordion-body">
-                    <div class="table-responsive mb-3">
-                        {{ top_under_valued_table|safe }}
-                    </div>
-                    {% if interesting_under_plot %}
-                    <img alt="Under-Valued Chart" class="img-fluid"
-                         src="data:image/png;base64,{{ interesting_under_plot }}">
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-        {% endif %}
-
-        <!-- Over-Valued -->
-        {% if top_over_valued_table %}
-        <div class="accordion-item">
-            <h2 class="accordion-header" id="headingOverValued">
-                <button aria-controls="collapseOverValued" aria-expanded="false" class="accordion-button collapsed"
-                        data-bs-target="#collapseOverValued" data-bs-toggle="collapse" type="button">
-                    Top 5 Over-Valued
-                </button>
-            </h2>
-            <div aria-labelledby="headingOverValued" class="accordion-collapse collapse" data-bs-parent="#evaluationAccordion"
-                 id="collapseOverValued">
-                <div class="accordion-body">
-                    <div class="table-responsive mb-3">
-                        {{ top_over_valued_table|safe }}
-                    </div>
-                    {% if interesting_over_plot %}
-                    <img alt="Over-Valued Chart" class="img-fluid"
-                         src="data:image/png;base64,{{ interesting_over_plot }}">
                     {% endif %}
                 </div>
             </div>
