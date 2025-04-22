@@ -5,7 +5,7 @@ import time
 import pandas as pd
 import pytest
 
-import preprocessing.web_scrape as ws
+from preprocessing import web_scrape as ws
 
 GOOD_HTML = """
 <table id="stats_standard">
