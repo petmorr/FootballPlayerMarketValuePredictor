@@ -64,8 +64,8 @@
 
                 <div class="mb-3">
                     <label class="form-label" for="search_term">Player Name:</label>
-                    <input class="form-control" id="search_term" name="search_term"
-                           placeholder="e.g., Cole Palmer" type="text" value="">
+                    <input class="form-control" id="search_term" name="search_term" placeholder="e.g., Cole Palmer"
+                           type="text" value="">
                 </div>
 
                 <button class="btn btn-primary" type="submit">Search</button>
@@ -129,7 +129,6 @@
 
     <!-- Model Performance Metrics Cards -->
     <div class="row mb-4">
-        <!-- Overall Performance -->
         {% if overall_metrics_plot %}
         <div class="col-md-6 mb-3">
             <div class="card h-100">
@@ -144,7 +143,6 @@
         </div>
         {% endif %}
 
-        <!-- MAE Comparison -->
         {% if mae_comparison_plot %}
         <div class="col-md-6 mb-3">
             <div class="card h-100">
@@ -160,7 +158,6 @@
     </div>
 
     <div class="row mb-4">
-        <!-- RMSE Comparison -->
         {% if rmse_comparison_plot %}
         <div class="col-md-6 mb-3">
             <div class="card h-100">
@@ -174,7 +171,6 @@
         </div>
         {% endif %}
 
-        <!-- R2 Comparison -->
         {% if r2_comparison_plot %}
         <div class="col-md-6 mb-3">
             <div class="card h-100">
@@ -204,7 +200,6 @@
     <!-- Advanced Analysis Section -->
     {% if scatter_plot or error_dist_plot %}
     <div class="row mb-4">
-        <!-- Market Value vs Prediction Scatter Plot -->
         {% if scatter_plot %}
         <div class="col-md-6 mb-3">
             <div class="card h-100">
@@ -218,7 +213,6 @@
         </div>
         {% endif %}
 
-        <!-- Error Distribution -->
         {% if error_dist_plot %}
         <div class="col-md-6 mb-3">
             <div class="card h-100">
@@ -237,7 +231,6 @@
     <!-- Top Differences Section -->
     {% if interesting_abs_plot or interesting_pct_plot %}
     <div class="row mb-4">
-        <!-- Absolute Difference Analysis -->
         {% if interesting_abs_plot %}
         <div class="col-md-6 mb-3">
             <div class="card h-100">
@@ -258,7 +251,6 @@
         </div>
         {% endif %}
 
-        <!-- Percentage Difference Analysis -->
         {% if interesting_pct_plot %}
         <div class="col-md-6 mb-3">
             <div class="card h-100">
@@ -284,7 +276,6 @@
     <!-- Under/Over Valued Players Section -->
     {% if interesting_under_plot or interesting_over_plot %}
     <div class="row mb-4">
-        <!-- Under-Valued Players -->
         {% if interesting_under_plot %}
         <div class="col-md-6 mb-3">
             <div class="card h-100">
@@ -305,7 +296,6 @@
         </div>
         {% endif %}
 
-        <!-- Over-Valued Players -->
         {% if interesting_over_plot %}
         <div class="col-md-6 mb-3">
             <div class="card h-100">
