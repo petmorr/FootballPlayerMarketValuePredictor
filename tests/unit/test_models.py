@@ -3,9 +3,9 @@ import pandas as pd
 import pytest
 
 import models.model_utils as mu
-from models.linear_regression_model import train_linear_regression
-from models.random_forest_model import train_random_forest
-from models.xgboost_model import train_xgboost
+from models.linear_regression_model import lr_pipeline_builder
+from models.random_forest_model import rf_pipeline_builder
+from models.xgboost_model import xgb_pipeline_builder
 
 
 class Dummy:
@@ -52,14 +52,14 @@ def test_train_linear_regression(tmp_path, sample_updated_parquet):
     # call training entrypoint, expect a CSV metrics file
     out = tmp_path / "models" / "results";
     out.mkdir(parents=True)
-    train_linear_regression(sample_updated_parquet, out)
+    lr_pipeline_builder(sample_updated_parquet)
     assert (out / "performance_metrics_linear_regression.csv").exists()
 
 
 def test_train_random_forest(tmp_path, sample_updated_parquet):
     out = tmp_path / "models" / "results";
     out.mkdir(parents=True)
-    train_random_forest(sample_updated_parquet, out)
+    rf_pipeline_builder(sample_updated_parquet)
     assert (out / "performance_metrics_random_forest.csv").exists()
 
 
@@ -68,5 +68,5 @@ def test_train_xgboost(tmp_path, sample_updated_parquet, monkeypatch):
     monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "")
     out = tmp_path / "models" / "results";
     out.mkdir(parents=True)
-    train_xgboost(sample_updated_parquet, out)
+    xgb_pipeline_builder(sample_updated_parquet)
     assert (out / "performance_metrics_xgboost.csv").exists()
