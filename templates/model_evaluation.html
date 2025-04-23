@@ -7,63 +7,85 @@
 
     <!-- Search Form -->
     <div class="card mb-4">
-        <div class="card-header">Search Player Data</div>
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">Search Player Data</h5>
+        </div>
         <div class="card-body">
             <form method="POST">
                 <div class="row">
                     <div class="col-md-2 mb-3">
                         <label class="form-label" for="model">Model</label>
                         <select class="form-select" id="model" name="model">
-                            <option value="Linear Regression">Linear Regression</option>
-                            <option value="Random Forest">Random Forest</option>
-                            <option value="XGBoost">XGBoost</option>
+                            <option and if search_params search_params.model== value="Linear Regression" {%
+                            "Linear Regression" %}selected{% endif %}>Linear Regression</option>
+                            <option and if search_params search_params.model== value="Random Forest" {%
+                            "Random Forest" %}selected{% endif %}>Random Forest</option>
+                            <option and if search_params search_params.model== value="XGBoost" {%
+                            "XGBoost" %}selected{% endif %}>XGBoost</option>
                         </select>
                     </div>
 
                     <div class="col-md-2 mb-3">
                         <label class="form-label" for="fe_variant">Feature Eng.</label>
                         <select class="form-select" id="fe_variant" name="fe_variant">
-                            <option value="enhanced_feature_engineering">Enhanced</option>
-                            <option value="feature_engineering">Basic</option>
-                            <option value="no_feature_engineering">None</option>
+                            <option and if search_params search_params.fe_variant== value="enhanced_feature_engineering"
+                                    {%
+                            "enhanced_feature_engineering" %}selected{% endif %}>Enhanced</option>
+                            <option and if search_params search_params.fe_variant== value="feature_engineering" {%
+                            "feature_engineering" %}selected{% endif %}>Basic</option>
+                            <option and if search_params search_params.fe_variant== value="no_feature_engineering" {%
+                            "no_feature_engineering" %}selected{% endif %}>None</option>
                         </select>
                     </div>
 
-                    <div class="col-md-2 mb-3">
+                    <div class="col-md-3 mb-3">
                         <label class="form-label" for="league">League</label>
                         <select class="form-select" id="league" name="league">
-                            <option value="Premier-League">Premier-League</option>
-                            <option value="La-Liga">La-Liga</option>
-                            <option value="Bundesliga">Bundesliga</option>
-                            <option value="Ligue-1">Ligue-1</option>
-                            <option value="Serie-A">Serie-A</option>
+                            <option and if search_params search_params.league== value="Premier-League" {%
+                            "Premier-League" %}selected{% endif %}>Premier League</option>
+                            <option and if search_params search_params.league== value="La-Liga" {%
+                            "La-Liga" %}selected{% endif %}>La Liga</option>
+                            <option and if search_params search_params.league== value="Bundesliga" {%
+                            "Bundesliga" %}selected{% endif %}>Bundesliga</option>
+                            <option and if search_params search_params.league== value="Ligue-1" {%
+                            "Ligue-1" %}selected{% endif %}>Ligue 1</option>
+                            <option and if search_params search_params.league== value="Serie-A" {%
+                            "Serie-A" %}selected{% endif %}>Serie A</option>
                         </select>
                     </div>
 
-                    <div class="col-md-2 mb-3">
+                    <div class="col-md-3 mb-3">
                         <label class="form-label" for="season">Season</label>
                         <select class="form-select" id="season" name="season">
-                            <option value="2019-2020">2019-2020</option>
-                            <option value="2020-2021">2020-2021</option>
-                            <option value="2021-2022">2021-2022</option>
-                            <option value="2022-2023">2022-2023</option>
-                            <option value="2023-2024">2023-2024</option>
+                            <option and if search_params search_params.season== value="2019-2020" {%
+                            "2019-2020" %}selected{% endif %}>2019-2020</option>
+                            <option and if search_params search_params.season== value="2020-2021" {%
+                            "2020-2021" %}selected{% endif %}>2020-2021</option>
+                            <option and if search_params search_params.season== value="2021-2022" {%
+                            "2021-2022" %}selected{% endif %}>2021-2022</option>
+                            <option and if search_params search_params.season== value="2022-2023" {%
+                            "2022-2023" %}selected{% endif %}>2022-2023</option>
+                            <option and if search_params search_params.season== value="2023-2024" {%
+                            "2023-2024" %}selected{% endif %}>2023-2024</option>
                         </select>
                     </div>
 
                     <div class="col-md-2 mb-3">
                         <label class="form-label" for="view_type">View</label>
                         <select class="form-select" id="view_type" name="view_type">
-                            <option value="Raw">Raw</option>
-                            <option value="Predicted">Predicted</option>
+                            <option and if search_params search_params.view_type== value="Raw" {%
+                            "Raw" %}selected{% endif %}>Raw</option>
+                            <option and if search_params search_params.view_type== value="Predicted" {%
+                            "Predicted" %}selected{% endif %}>Predicted</option>
                         </select>
                     </div>
                 </div>
 
                 <div class="mb-3">
                     <label class="form-label" for="search_term">Player Name:</label>
-                    <input class="form-control" id="search_term" name="search_term" placeholder="e.g., Cole Palmer"
-                           type="text">
+                    <input class="form-control" id="search_term" name="search_term"
+                           placeholder="e.g., Cole Palmer" type="text"
+                           value="{{ search_params.search_term if search_params and search_params.search_term else '' }}">
                 </div>
 
                 <button class="btn btn-primary" type="submit">Search</button>
@@ -71,43 +93,443 @@
         </div>
     </div>
 
+    <!-- Model Performance Metrics Cards -->
+    <div class="row mb-4">
+        <!-- Overall Performance -->
+        {% if overall_metrics_plot %}
+        <div class="col-md-6 mb-3">
+            <div class="card h-100">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0">Best Model Performance</h5>
+                </div>
+                <div class="card-body text-center">
+                    <img alt="Best Model Metrics" class="img-fluid"
+                         src="data:image/png;base64,{{ overall_metrics_plot }}">
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- MAE Comparison -->
+        {% if mae_comparison_plot %}
+        <div class="col-md-6 mb-3">
+            <div class="card h-100">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0">MAE Comparison by Feature Engineering</h5>
+                </div>
+                <div class="card-body text-center">
+                    <img alt="MAE Comparison" class="img-fluid" src="data:image/png;base64,{{ mae_comparison_plot }}">
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="row mb-4">
+        <!-- RMSE Comparison -->
+        {% if rmse_comparison_plot %}
+        <div class="col-md-6 mb-3">
+            <div class="card h-100">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0">RMSE Comparison by Feature Engineering</h5>
+                </div>
+                <div class="card-body text-center">
+                    <img alt="RMSE Comparison" class="img-fluid" src="data:image/png;base64,{{ rmse_comparison_plot }}">
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- R2 Comparison -->
+        {% if r2_comparison_plot %}
+        <div class="col-md-6 mb-3">
+            <div class="card h-100">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0">R² Comparison by Feature Engineering</h5>
+                </div>
+                <div class="card-body text-center">
+                    <img alt="R² Comparison" class="img-fluid" src="data:image/png;base64,{{ r2_comparison_plot }}">
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
     <!-- Search Results -->
     {% if search_results %}
     <div class="card mb-4">
-        <div class="card-header">Search Results</div>
+        <div class="card-header bg-success text-white">
+            <h5 class="mb-0">Search Results</h5>
+        </div>
         <div class="card-body table-responsive">
             {{ search_results|safe }}
         </div>
     </div>
     {% endif %}
 
-    <!-- Model Performance -->
-    {% if overall_metrics_plot %}
-    <div class="card mb-4">
-        <div class="card-header">Model Performance</div>
-        <div class="card-body text-center">
-            <img alt="Overall Metrics" class="img-fluid" src="data:image/png;base64,{{ overall_metrics_plot }}">
+    <!-- Advanced Analysis Section -->
+    {% if scatter_plot or error_dist_plot %}
+    <div class="row mb-4">
+        <!-- Market Value vs Prediction Scatter Plot -->
+        {% if scatter_plot %}
+        <div class="col-md-6 mb-3">
+            <div class="card h-100">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="mb-0">Market Value vs Prediction</h5>
+                </div>
+                <div class="card-body text-center">
+                    <img alt="Scatter Plot" class="img-fluid" src="data:image/png;base64,{{ scatter_plot }}">
+                </div>
+            </div>
         </div>
+        {% endif %}
+
+        <!-- Error Distribution -->
+        {% if error_dist_plot %}
+        <div class="col-md-6 mb-3">
+            <div class="card h-100">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="mb-0">Error Distribution</h5>
+                </div>
+                <div class="card-body text-center">
+                    <img alt="Error Distribution" class="img-fluid" src="data:image/png;base64,{{ error_dist_plot }}">
+                </div>
+            </div>
+        </div>
+        {% endif %}
     </div>
     {% endif %}
 
-    <!-- Additional Analysis -->
-    {% if error_dist_plot %}
-    <div class="card mb-4">
-        <div class="card-header">Error Distribution</div>
-        <div class="card-body text-center">
-            <img alt="Error Distribution" class="img-fluid" src="data:image/png;base64,{{ error_dist_plot }}">
+    <!-- Top Differences Section -->
+    {% if interesting_abs_plot or interesting_pct_plot %}
+    <div class="row mb-4">
+        <!-- Absolute Difference Analysis -->
+        {% if interesting_abs_plot %}
+        <div class="col-md-6 mb-3">
+            <div class="card h-100">
+                <div class="card-header bg-secondary text-white">
+                    <h5 class="mb-0">Top 5 Absolute Differences</h5>
+                </div>
+                <div class="card-body">
+                    <img alt="Top Absolute Differences" class="img-fluid"
+                         src="data:image/png;base64,{{ interesting_abs_plot }}">
+                    {% if interesting_abs %}
+                    <div class="mt-3 table-responsive">
+                        <h6>Details:</h6>
+                        {{ interesting_abs|safe }}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
         </div>
+        {% endif %}
+
+        <!-- Percentage Difference Analysis -->
+        {% if interesting_pct_plot %}
+        <div class="col-md-6 mb-3">
+            <div class="card h-100">
+                <div class="card-header bg-secondary text-white">
+                    <h5 class="mb-0">Top 5 Percentage Differences</h5>
+                </div>
+                <div class="card-body">
+                    <img alt="Top Percentage Differences" class="img-fluid"
+                         src="data:image/png;base64,{{ interesting_pct_plot }}">
+                    {% if interesting_pct %}
+                    <div class="mt-3 table-responsive">
+                        <h6>Details:</h6>
+                        {{ interesting_pct|safe }}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
     </div>
     {% endif %}
 
-    {% if scatter_plot %}
-    <div class="card mb-4">
-        <div class="card-header">Market Value vs Prediction</div>
-        <div class="card-body text-center">
-            <img alt="Scatter Plot" class="img-fluid" src="data:image/png;base64,{{ scatter_plot }}">
+    <!-- Under/Over Valued Players Section -->
+    {% if interesting_under_plot or interesting_over_plot %}
+    <div class="row mb-4">
+        <!-- Under-Valued Players -->
+        {% if interesting_under_plot %}
+        <div class="col-md-6 mb-3">
+            <div class="card h-100">
+                <div class="card-header bg-danger text-white">
+                    <h5 class="mb-0">Under-Valued Players</h5>
+                </div>
+                <div class="card-body">
+                    <img alt="Under-Valued Players" class="img-fluid"
+                         src="data:image/png;base64,{{ interesting_under_plot }}">
+                    {% if top_under_valued_table %}
+                    <div class="mt-3 table-responsive">
+                        <h6>Details:</h6>
+                        {{ top_under_valued_table|safe }}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
         </div>
+        {% endif %}
+
+        <!-- Over-Valued Players -->
+        {% if interesting_over_plot %}
+        <div class="col-md-6 mb-3">
+            <div class="card h-100">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0">Over-Valued Players</h5>
+                </div>
+                <div class="card-body">
+                    <img alt="Over-Valued Players" class="img-fluid"
+                         src="data:image/png;base64,{{ interesting_over_plot }}">
+                    {% if top_over_valued_table %}
+                    <div class="mt-3 table-responsive">
+                        <h6>Details:</h6>
+                        {{ top_over_valued_table|safe }}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
     </div>
     {% endif %}
+
+    <!-- Available Prediction Files -->
+    <div class="card mb-4">
+        <div class="card-header bg-dark text-white">
+            <h5 class="mb-0">Available Prediction Files</h5>
+        </div>
+        <div class="card-body">
+            <div class="accordion" id="predictionAccordion">
+                {% for model_name, fe_variants in predictions.items() %}
+                <div class="accordion-item">
+                    <h2 class="accordion-header" id="heading{{ loop.index }}">
+                        <button aria-controls="collapse{{ loop.index }}" aria-expanded="false" class="accordion-button collapsed"
+                                data-bs-target="#collapse{{ loop.index }}" data-bs-toggle="collapse"
+                                type="button">
+                            {{ model_name }}
+                        </button>
+                    </h2>
+                    <div aria-labelledby="heading{{ loop.index }}" class="accordion-collapse collapse"
+                         data-bs-parent="#predictionAccordion" id="collapse{{ loop.index }}">
+                        <div class="accordion-body">
+                            {% for fe_variant, league_dict in fe_variants.items() %}
+                            <div class="mb-3">
+                                <h6>{{ fe_variant }}</h6>
+                                <ul class="list-group">
+                                    {% for league_season, link in league_dict.items() %}
+                                    <li class="list-group-item">
+                                        <a class="text-decoration-none" href="{{ link }}">{{ league_season }}</a>
+                                    </li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Model Performance Metrics Summary -->
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">Model Performance Metrics Summary</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped table-bordered">
+                    <thead class="table-dark">
+                    <tr>
+                        <th>Model</th>
+                        <th>Feature Engineering</th>
+                        <th>RMSE</th>
+                        <th>R²</th>
+                        <th>MAE</th>
+                        <th>MAPE</th>
+                        <th>Dataset</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <!-- Linear Regression -->
+                    <tr>
+                        <td rowspan="6">Linear Regression</td>
+                        <td rowspan="2">Enhanced</td>
+                        <td>17,450,627</td>
+                        <td>-0.004</td>
+                        <td>8,257,502</td>
+                        <td>204.01%</td>
+                        <td>Validation</td>
+                    </tr>
+                    <tr>
+                        <td>14,804,751</td>
+                        <td>0.008</td>
+                        <td>7,122,874</td>
+                        <td>238.21%</td>
+                        <td>Test</td>
+                    </tr>
+                    <tr>
+                        <td rowspan="2">Basic</td>
+                        <td>16,761,941</td>
+                        <td>0.074</td>
+                        <td>8,012,955</td>
+                        <td>210.90%</td>
+                        <td>Validation</td>
+                    </tr>
+                    <tr>
+                        <td>14,292,363</td>
+                        <td>0.076</td>
+                        <td>6,886,796</td>
+                        <td>219.16%</td>
+                        <td>Test</td>
+                    </tr>
+                    <tr>
+                        <td rowspan="2">None</td>
+                        <td>16,786,024</td>
+                        <td>0.071</td>
+                        <td>8,048,386</td>
+                        <td>203.48%</td>
+                        <td>Validation</td>
+                    </tr>
+                    <tr>
+                        <td>17,450,869</td>
+                        <td>-0.378</td>
+                        <td>7,112,294</td>
+                        <td>259.49%</td>
+                        <td>Test</td>
+                    </tr>
+
+                    <!-- Random Forest -->
+                    <tr>
+                        <td rowspan="6">Random Forest</td>
+                        <td rowspan="2">Enhanced</td>
+                        <td>14,673,984</td>
+                        <td>0.290</td>
+                        <td>7,074,873</td>
+                        <td>236.22%</td>
+                        <td>Validation</td>
+                    </tr>
+                    <tr>
+                        <td>12,358,649</td>
+                        <td>0.309</td>
+                        <td>6,120,171</td>
+                        <td>269.11%</td>
+                        <td>Test</td>
+                    </tr>
+                    <tr>
+                        <td rowspan="2">Basic</td>
+                        <td>13,955,557</td>
+                        <td>0.358</td>
+                        <td>6,877,778</td>
+                        <td>226.43%</td>
+                        <td>Validation</td>
+                    </tr>
+                    <tr>
+                        <td>11,578,527</td>
+                        <td>0.393</td>
+                        <td>5,821,130</td>
+                        <td>247.05%</td>
+                        <td>Test</td>
+                    </tr>
+                    <tr>
+                        <td rowspan="2">None</td>
+                        <td>13,739,404</td>
+                        <td>0.378</td>
+                        <td>6,832,667</td>
+                        <td>231.98%</td>
+                        <td>Validation</td>
+                    </tr>
+                    <tr>
+                        <td>11,371,293</td>
+                        <td>0.415</td>
+                        <td>5,759,501</td>
+                        <td>250.79%</td>
+                        <td>Test</td>
+                    </tr>
+
+                    <!-- XGBoost -->
+                    <tr>
+                        <td rowspan="6">XGBoost</td>
+                        <td rowspan="2">Enhanced</td>
+                        <td>13,597,779</td>
+                        <td>0.391</td>
+                        <td>6,774,514</td>
+                        <td>236.49%</td>
+                        <td>Validation</td>
+                    </tr>
+                    <tr>
+                        <td>11,827,564</td>
+                        <td>0.367</td>
+                        <td>5,831,366</td>
+                        <td>251.17%</td>
+                        <td>Test</td>
+                    </tr>
+                    <tr>
+                        <td rowspan="2">Basic</td>
+                        <td>12,950,520</td>
+                        <td>0.447</td>
+                        <td>6,631,896</td>
+                        <td>219.50%</td>
+                        <td>Validation</td>
+                    </tr>
+                    <tr>
+                        <td>11,006,271</td>
+                        <td>0.452</td>
+                        <td>5,622,399</td>
+                        <td>239.37%</td>
+                        <td>Test</td>
+                    </tr>
+                    <tr>
+                        <td rowspan="2">None</td>
+                        <td>13,493,107</td>
+                        <td>0.400</td>
+                        <td>6,788,537</td>
+                        <td>237.37%</td>
+                        <td>Validation</td>
+                    </tr>
+                    <tr>
+                        <td>11,163,669</td>
+                        <td>0.436</td>
+                        <td>5,723,598</td>
+                        <td>259.18%</td>
+                        <td>Test</td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Key Findings Summary -->
+    <div class="card mt-4">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">Key Findings</h5>
+        </div>
+        <div class="card-body">
+            <ul class="list-group">
+                <li class="list-group-item list-group-item-info">
+                    <strong>Best Overall Model:</strong> XGBoost with Basic feature engineering (R² = 0.452, MAE =
+                    £5,622,399)
+                </li>
+                <li class="list-group-item list-group-item-info">
+                    <strong>Most Consistent Model:</strong> Random Forest with no feature engineering (R² = 0.415, MAE =
+                    £5,759,501)
+                </li>
+                <li class="list-group-item list-group-item-info">
+                    <strong>Worst Performer:</strong> Linear Regression with no feature engineering on test data (R² =
+                    -0.378)
+                </li>
+                <li class="list-group-item list-group-item-info">
+                    <strong>Feature Engineering Impact:</strong> Basic feature engineering generally outperforms both
+                    Enhanced and No feature engineering
+                </li>
+                <li class="list-group-item list-group-item-info">
+                    <strong>Performance Range:</strong> MAE ranges from £5.6M to £8.2M across all models
+                </li>
+            </ul>
+        </div>
+    </div>
 </div>
 {% endblock %}
