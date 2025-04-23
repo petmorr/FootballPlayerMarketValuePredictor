@@ -73,59 +73,7 @@
         </div>
     </div>
 
-    {% if search_params %}
-    <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            {%
-                if search_params.model %
-            }
-            document.getElementById('model').value = "{{ search_params.model }}";
-            {%
-                endif %
-            }
 
-            {%
-                if search_params.fe_variant %
-            }
-            document.getElementById('fe_variant').value = "{{ search_params.fe_variant }}";
-            {%
-                endif %
-            }
-
-            {%
-                if search_params.league %
-            }
-            document.getElementById('league').value = "{{ search_params.league }}";
-            {%
-                endif %
-            }
-
-            {%
-                if search_params.season %
-            }
-            document.getElementById('season').value = "{{ search_params.season }}";
-            {%
-                endif %
-            }
-
-            {%
-                if search_params.view_type %
-            }
-            document.getElementById('view_type').value = "{{ search_params.view_type }}";
-            {%
-                endif %
-            }
-
-            {%
-                if search_params.search_term %
-            }
-            document.getElementById('search_term').value = "{{ search_params.search_term }}";
-            {%
-                endif %
-            }
-        });
-    </script>
-    {% endif %}
 
     <!-- Model Performance Metrics Cards -->
     <div class="row mb-4">
