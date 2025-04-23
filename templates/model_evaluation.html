@@ -4,42 +4,221 @@
 {% block content %}
 <div class="container mt-3">
     <h2>Model Evaluation</h2>
+    <div class="accordion" id="evaluationAccordion">
 
-    <!-- Search Form -->
-    <form method="POST">
-        <div class="row">
-            <!-- Model Selection -->
-            <div class="col-md-3">
-                <div class="mb-3">
-                    <label class="form-label" for="model">Model</label>
-                    <select class="form-select" id="model" name="model">
-                        {% for option in ["Linear Regression", "Random Forest", "XGBoost"] %}
-                        <option value="{{ option }}">{{ option }}</option>
-                        {% endfor %}
-                    </select>
+        <!-- Performance Metrics (Visual) -->
+        {% if overall_metrics_plot %}
+        <div class="accordion-item">
+            <h2 class="accordion-header" id="headingMetrics">
+                <button aria-controls="collapseMetrics" aria-expanded="false" class="accordion-button collapsed"
+                        data-bs-target="#collapseMetrics" data-bs-toggle="collapse" type="button">
+                    Model Performance Metrics
+                </button>
+            </h2>
+            <div aria-labelledby="headingMetrics" class="accordion-collapse collapse" data-bs-parent="#evaluationAccordion"
+                 id="collapseMetrics">
+                <div class="accordion-body text-center">
+                    <img alt="Performance Metrics" class="img-fluid"
+                         src="data:image/png;base64,{{ overall_metrics_plot }}">
                 </div>
-            </div>
-
-            <!-- Search Term -->
-            <div class="col-md-6">
-                <div class="mb-3">
-                    <label class="form-label" for="search_term">Player Name:</label>
-                    <input class="form-control" id="search_term" name="search_term" placeholder="e.g., Cole Palmer"
-                           type="text">
-                </div>
-            </div>
-
-            <div class="col-md-3 d-flex align-items-end">
-                <button class="btn btn-primary mb-3" type="submit">Search</button>
             </div>
         </div>
-    </form>
+        {% endif %}
 
-    {% if search_results %}
-    <div class="mt-4">
-        <h3>Results</h3>
-        {{ search_results|safe }}
+        <!-- Search Form -->
+        <div class="accordion-item">
+            <h2 class="accordion-header" id="headingSearchForm">
+                <button aria-controls="collapseSearchForm" aria-expanded="true" class="accordion-button"
+                        data-bs-target="#collapseSearchForm" data-bs-toggle="collapse" type="button">
+                    Search Player Data
+                </button>
+            </h2>
+            <div aria-labelledby="headingSearchForm" class="accordion-collapse collapse show" data-bs-parent="#evaluationAccordion"
+                 id="collapseSearchForm">
+                <div class="accordion-body">
+                    <form method="POST">
+                        <div class="row">
+                            <!-- Model Selection -->
+                            <div class="col-md-2">
+                                <div class="mb-3">
+                                    <label class="form-label" for="model">Model</label>
+                                    <select class="form-select" id="model" name="model">
+                                        {% for option in ["Linear Regression", "Random Forest", "XGBoost"] %}
+                                        <option %} %}selected{% and endif if option
+                                                search_params search_params.model== value="{{ option }}" {%>
+                                            {{ option }}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </div>
+
+                            <!-- Feature Engineering Variant -->
+                            <div class="col-md-2">
+                                <div class="mb-3">
+                                    <label class="form-label" for="fe_variant">Feature Eng.</label>
+                                    <select class="form-select" id="fe_variant" name="fe_variant">
+                                        {% set fe_options = [
+                                        ("enhanced_feature_engineering", "Enhanced"),
+                                        ("feature_engineering", "Basic"),
+                                        ("no_feature_engineering", "None")
+                                        ] %}
+                                        {% for value, label in fe_options %}
+                                        <option %} %}selected{% and endif if search_params
+                                                search_params.fe_variant== value="{{ value }}" value {%>
+                                            {{ label }}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </div>
+
+                            <!-- League Selection -->
+                            <div class="col-md-2">
+                                <div class="mb-3">
+                                    <label class="form-label" for="league">League</label>
+                                    <select class="form-select" id="league" name="league">
+                                        {% for option in ["Premier-League", "La-Liga", "Bundesliga", "Ligue-1",
+                                        "Serie-A"] %}
+                                        <option %} %}selected{% and endif if option
+                                                search_params search_params.league== value="{{ option }}" {%>
+                                            {{ option }}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </div>
+
+                            <!-- Season Selection -->
+                            <div class="col-md-2">
+                                <div class="mb-3">
+                                    <label class="form-label" for="season">Season</label>
+                                    <select class="form-select" id="season" name="season">
+                                        {% for option in ["2019-2020", "2020-2021", "2021-2022", "2022-2023",
+                                        "2023-2024"] %}
+                                        <option %} %}selected{% and endif if option
+                                                search_params search_params.season== value="{{ option }}" {%>
+                                            {{ option }}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </div>
+
+                            <!-- View Type -->
+                            <div class="col-md-2">
+                                <div class="mb-3">
+                                    <label class="form-label" for="view_type">View</label>
+                                    <select class="form-select" id="view_type" name="view_type">
+                                        {% for option in ["Raw", "Predicted"] %}
+                                        <option %} %}selected{% and endif if option
+                                                search_params search_params.view_type== value="{{ option }}" {%>
+                                            {{ option }}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Search Term -->
+                        <div class="mb-3">
+                            <label class="form-label" for="search_term">Player Name:</label>
+                            <input class="form-control" id="search_term" name="search_term" placeholder="e.g., Cole Palmer"
+                                   type="text" value="{{ search_params.search_term|default('') }}">
+                        </div>
+                        <button class="btn btn-primary" type="submit">Search</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Search Results -->
+        {% if search_results %}
+        <div class="accordion-item">
+            <h2 class="accordion-header" id="headingSearchResults">
+                <button aria-controls="collapseSearchResults" aria-expanded="false" class="accordion-button collapsed"
+                        data-bs-target="#collapseSearchResults" data-bs-toggle="collapse"
+                        type="button">
+                    Search Results
+                </button>
+            </h2>
+            <div aria-labelledby="headingSearchResults" class="accordion-collapse collapse" data-bs-parent="#evaluationAccordion"
+                 id="collapseSearchResults">
+                <div class="accordion-body table-responsive">
+                    {{ search_results|safe }}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Various Analysis Sections -->
+        {% if interesting_abs %}
+        <div class="accordion-item">
+            <h2 class="accordion-header" id="headingAbsDiff">
+                <button aria-controls="collapseAbsDiff" aria-expanded="false" class="accordion-button collapsed"
+                        data-bs-target="#collapseAbsDiff" data-bs-toggle="collapse" type="button">
+                    Top 5 Absolute Difference
+                </button>
+            </h2>
+            <div aria-labelledby="headingAbsDiff" class="accordion-collapse collapse" data-bs-parent="#evaluationAccordion"
+                 id="collapseAbsDiff">
+                <div class="accordion-body">
+                    <div class="table-responsive mb-3">
+                        {{ interesting_abs|safe }}
+                    </div>
+                    {% if interesting_abs_plot %}
+                    <img alt="Top Abs Diff" class="img-fluid" src="data:image/png;base64,{{ interesting_abs_plot }}">
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Predicted Price Files -->
+        <div class="accordion-item">
+            <h2 class="accordion-header" id="headingPredictionFiles">
+                <button aria-controls="collapsePredictionFiles" aria-expanded="false" class="accordion-button collapsed"
+                        data-bs-target="#collapsePredictionFiles" data-bs-toggle="collapse"
+                        type="button">
+                    Predicted Price Files
+                </button>
+            </h2>
+            <div aria-labelledby="headingPredictionFiles" class="accordion-collapse collapse"
+                 data-bs-parent="#evaluationAccordion" id="collapsePredictionFiles">
+                <div class="accordion-body">
+                    {% for model_name, fe_variants in predictions.items() %}
+                    <div class="card mb-3">
+                        <div class="card-header">
+                            <strong>{{ model_name }} Predictions</strong>
+                        </div>
+                        <div class="card-body">
+                            {% if fe_variants %}
+                            {% for fe_variant, league_dict in fe_variants.items() %}
+                            <h5>{{ fe_variant }}</h5>
+                            {% if league_dict %}
+                            <ul class="list-group mb-3">
+                                {% for league_season, link in league_dict.items() %}
+                                <li class="list-group-item">
+                                    <a href="{{ url_for('static', filename=link) }}">
+                                        {{ league_season }}
+                                    </a>
+                                </li>
+                                {% endfor %}
+                            </ul>
+                            {% else %}
+                            <p>No predictions for this variant.</p>
+                            {% endif %}
+                            {% endfor %}
+                            {% else %}
+                            <p>No prediction files found.</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
     </div>
-    {% endif %}
 </div>
 {% endblock %}
