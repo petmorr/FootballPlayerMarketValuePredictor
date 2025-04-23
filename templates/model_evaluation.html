@@ -16,67 +16,48 @@
                     <div class="col-md-2 mb-3">
                         <label class="form-label" for="model">Model</label>
                         <select class="form-select" id="model" name="model">
-                            <option and if search_params search_params.model== value="Linear Regression" {%
-                            "Linear Regression" %}selected{% endif %}>Linear Regression</option>
-                            <option and if search_params search_params.model== value="Random Forest" {%
-                            "Random Forest" %}selected{% endif %}>Random Forest</option>
-                            <option and if search_params search_params.model== value="XGBoost" {%
-                            "XGBoost" %}selected{% endif %}>XGBoost</option>
+                            <option value="Linear Regression">Linear Regression</option>
+                            <option value="Random Forest">Random Forest</option>
+                            <option value="XGBoost">XGBoost</option>
                         </select>
                     </div>
 
                     <div class="col-md-2 mb-3">
                         <label class="form-label" for="fe_variant">Feature Eng.</label>
                         <select class="form-select" id="fe_variant" name="fe_variant">
-                            <option and if search_params search_params.fe_variant== value="enhanced_feature_engineering"
-                                    {%
-                            "enhanced_feature_engineering" %}selected{% endif %}>Enhanced</option>
-                            <option and if search_params search_params.fe_variant== value="feature_engineering" {%
-                            "feature_engineering" %}selected{% endif %}>Basic</option>
-                            <option and if search_params search_params.fe_variant== value="no_feature_engineering" {%
-                            "no_feature_engineering" %}selected{% endif %}>None</option>
+                            <option value="enhanced_feature_engineering">Enhanced</option>
+                            <option value="feature_engineering">Basic</option>
+                            <option value="no_feature_engineering">None</option>
                         </select>
                     </div>
 
                     <div class="col-md-3 mb-3">
                         <label class="form-label" for="league">League</label>
                         <select class="form-select" id="league" name="league">
-                            <option and if search_params search_params.league== value="Premier-League" {%
-                            "Premier-League" %}selected{% endif %}>Premier League</option>
-                            <option and if search_params search_params.league== value="La-Liga" {%
-                            "La-Liga" %}selected{% endif %}>La Liga</option>
-                            <option and if search_params search_params.league== value="Bundesliga" {%
-                            "Bundesliga" %}selected{% endif %}>Bundesliga</option>
-                            <option and if search_params search_params.league== value="Ligue-1" {%
-                            "Ligue-1" %}selected{% endif %}>Ligue 1</option>
-                            <option and if search_params search_params.league== value="Serie-A" {%
-                            "Serie-A" %}selected{% endif %}>Serie A</option>
+                            <option value="Premier-League">Premier League</option>
+                            <option value="La-Liga">La Liga</option>
+                            <option value="Bundesliga">Bundesliga</option>
+                            <option value="Ligue-1">Ligue 1</option>
+                            <option value="Serie-A">Serie A</option>
                         </select>
                     </div>
 
                     <div class="col-md-3 mb-3">
                         <label class="form-label" for="season">Season</label>
                         <select class="form-select" id="season" name="season">
-                            <option and if search_params search_params.season== value="2019-2020" {%
-                            "2019-2020" %}selected{% endif %}>2019-2020</option>
-                            <option and if search_params search_params.season== value="2020-2021" {%
-                            "2020-2021" %}selected{% endif %}>2020-2021</option>
-                            <option and if search_params search_params.season== value="2021-2022" {%
-                            "2021-2022" %}selected{% endif %}>2021-2022</option>
-                            <option and if search_params search_params.season== value="2022-2023" {%
-                            "2022-2023" %}selected{% endif %}>2022-2023</option>
-                            <option and if search_params search_params.season== value="2023-2024" {%
-                            "2023-2024" %}selected{% endif %}>2023-2024</option>
+                            <option value="2019-2020">2019-2020</option>
+                            <option value="2020-2021">2020-2021</option>
+                            <option value="2021-2022">2021-2022</option>
+                            <option value="2022-2023">2022-2023</option>
+                            <option value="2023-2024">2023-2024</option>
                         </select>
                     </div>
 
                     <div class="col-md-2 mb-3">
                         <label class="form-label" for="view_type">View</label>
                         <select class="form-select" id="view_type" name="view_type">
-                            <option and if search_params search_params.view_type== value="Raw" {%
-                            "Raw" %}selected{% endif %}>Raw</option>
-                            <option and if search_params search_params.view_type== value="Predicted" {%
-                            "Predicted" %}selected{% endif %}>Predicted</option>
+                            <option value="Raw">Raw</option>
+                            <option value="Predicted">Predicted</option>
                         </select>
                     </div>
                 </div>
@@ -84,14 +65,67 @@
                 <div class="mb-3">
                     <label class="form-label" for="search_term">Player Name:</label>
                     <input class="form-control" id="search_term" name="search_term"
-                           placeholder="e.g., Cole Palmer" type="text"
-                           value="{{ search_params.search_term if search_params and search_params.search_term else '' }}">
+                           placeholder="e.g., Cole Palmer" type="text" value="">
                 </div>
 
                 <button class="btn btn-primary" type="submit">Search</button>
             </form>
         </div>
     </div>
+
+    {% if search_params %}
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            {%
+                if search_params.model %
+            }
+            document.getElementById('model').value = "{{ search_params.model }}";
+            {%
+                endif %
+            }
+
+            {%
+                if search_params.fe_variant %
+            }
+            document.getElementById('fe_variant').value = "{{ search_params.fe_variant }}";
+            {%
+                endif %
+            }
+
+            {%
+                if search_params.league %
+            }
+            document.getElementById('league').value = "{{ search_params.league }}";
+            {%
+                endif %
+            }
+
+            {%
+                if search_params.season %
+            }
+            document.getElementById('season').value = "{{ search_params.season }}";
+            {%
+                endif %
+            }
+
+            {%
+                if search_params.view_type %
+            }
+            document.getElementById('view_type').value = "{{ search_params.view_type }}";
+            {%
+                endif %
+            }
+
+            {%
+                if search_params.search_term %
+            }
+            document.getElementById('search_term').value = "{{ search_params.search_term }}";
+            {%
+                endif %
+            }
+        });
+    </script>
+    {% endif %}
 
     <!-- Model Performance Metrics Cards -->
     <div class="row mb-4">
