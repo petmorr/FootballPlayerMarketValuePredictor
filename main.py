@@ -139,50 +139,65 @@ def load_missing_transfer_values() -> list:
     """Loads missing market value entries from parquet files."""
     missing_entries = []
     updated_dir = Path("data/updated")
-    for file in updated_dir.rglob("updated_*.parquet"):
-        try:
-            df = pd.read_parquet(file)
-        except Exception as e:
-            logger.error(f"Error reading {file}: {e}")
-            continue
-        df.columns = [c.lower() for c in df.columns]
 
-        if "market value" in df.columns:
-            mv_col = "market value"
-        elif "market_value" in df.columns:
-            mv_col = "market_value"
-        else:
-            candidate_cols = [c for c in df.columns if "market" in c and "value" in c]
-            if candidate_cols:
-                mv_col = candidate_cols[0]
-            else:
-                logger.warning(f"No market value column found in {file.name}.")
+    # Search for feature engineering variant directories
+    fe_variants = [d for d in updated_dir.iterdir() if d.is_dir()]
+
+    for fe_dir in fe_variants:
+        fe_variant = fe_dir.name
+        for file in fe_dir.rglob("updated_*.parquet"):
+            try:
+                df = pd.read_parquet(file)
+            except Exception as e:
+                logger.error(f"Error reading {file}: {e}")
                 continue
+            df.columns = [c.lower() for c in df.columns]
 
-        def is_missing(val):
-            if pd.isna(val):
-                return True
-            if isinstance(val, str):
-                return val.strip().lower() in ["", "n/a", "na", "null", "none", "nan", "-"]
-            return False
+            if "market value" in df.columns:
+                mv_col = "market value"
+            elif "market_value" in df.columns:
+                mv_col = "market_value"
+            else:
+                candidate_cols = [c for c in df.columns if "market" in c and "value" in c]
+                if candidate_cols:
+                    mv_col = candidate_cols[0]
+                else:
+                    logger.warning(f"No market value column found in {file.name}.")
+                    continue
 
-        missing_df = df[df[mv_col].apply(is_missing)]
-        base_name = file.stem
-        parts = base_name.split("_")
-        league = parts[1] if len(parts) >= 3 else "Unknown"
-        season = parts[2] if len(parts) >= 3 else "Unknown"
-        fe_variant = file.parent.name
+            def is_missing(val):
+                if pd.isna(val):
+                    return True
+                if isinstance(val, str):
+                    return val.strip().lower() in ["", "n/a", "na", "null", "none", "nan", "-"]
+                return False
 
-        for _, row in missing_df.iterrows():
-            entry = {
-                "dataset": f"{league}_{season}_{fe_variant}",
-                "season": season,
-                "player": row.get("player", "Unknown"),
-                "team": row.get("squad", "Unknown"),
-                "closest_date": row.get("closest_date", "N/A"),
-                "current_value": row.get(mv_col, "N/A")
-            }
-            missing_entries.append(entry)
+            missing_df = df[df[mv_col].apply(is_missing)]
+
+            # Extract league and season from the filename
+            base_name = file.stem
+            parts = base_name.split("_")
+            if len(parts) >= 3:
+                league = parts[1]
+                season = parts[2]
+
+                # Store dataset as league_season_fe_variant
+                dataset = f"{league}_{season}_{fe_variant}"
+
+                for _, row in missing_df.iterrows():
+                    entry = {
+                        "dataset": dataset,
+                        "season": season,
+                        "player": row.get("player", "Unknown"),
+                        "team": row.get("squad", "Unknown"),
+                        "closest_date": row.get("closest_date", "N/A"),
+                        "current_value": row.get(mv_col, "N/A"),
+                        "fe_variant": fe_variant
+                    }
+                    missing_entries.append(entry)
+            else:
+                logger.warning(f"Invalid filename format: {file.name}")
+
     return missing_entries
 
 def group_missing_entries(missing_entries: list) -> dict:
@@ -193,14 +208,29 @@ def group_missing_entries(missing_entries: list) -> dict:
         grouped.setdefault(ds, []).append(entry)
     return grouped
 
+
 def update_transfer_value_in_parquet(dataset: str, season: str, updates: list) -> bool:
     """Updates the parquet files with new market values."""
     updated_dir = Path("data/updated")
-    filename = f"updated_{dataset}.parquet"
-    file_path = updated_dir / filename
+
+    # Split dataset to extract league, season, and feature engineering variant
+    parts = dataset.split('_')
+    if len(parts) >= 3:
+        # Extract league, season, and feature engineering variant
+        league = parts[0]
+        season = parts[1]
+        fe_variant = '_'.join(parts[2:])  # Properly handle multi-part feature engineering names
+
+        # Construct the correct path with the feature engineering variant as a directory
+        file_path = updated_dir / fe_variant / f"updated_{league}_{season}.parquet"
+    else:
+        # Legacy path handling (fallback)
+        file_path = updated_dir / f"updated_{dataset}.parquet"
+
     if not file_path.exists():
         logger.error(f"File not found: {file_path}")
         return False
+
     try:
         df = pd.read_parquet(file_path)
     except Exception as e:

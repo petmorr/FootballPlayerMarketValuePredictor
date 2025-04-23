@@ -343,11 +343,13 @@ def filter_market_values_by_season(
 
 
 def validate_market_value(
-        market_values: List[Dict[str, Any]],
+        market_values: List[Dict[str, Any]] | Dict[str, Any],
         team_name: str,
         season_start: datetime,
         season_end: datetime
 ) -> Optional[Dict[str, Any]]:
+    if isinstance(market_values, dict):
+        market_values = [market_values]
     season_entries = filter_market_values_by_season(market_values, season_start, season_end)
     closest_entry, closest_diff = None, float("inf")
     for entry in season_entries:
