@@ -1,54 +1,116 @@
 {% extends "base.html" %}
 {% block title %}Application Logs{% endblock %}
 
-{% block content %}
-<div>
-    <h2>Application Logs</h2>
-    <p>
-        This page displays logs from various parts of the application. The page can auto-refresh
-        if you wish to keep updated.
-    </p>
+{% block head %}
+<style>
+    .log-container {
+        font-family: monospace;
+        white-space: pre-wrap;
+        background-color: #f8f9fa;
+        height: 400px;
+        overflow-y: auto;
+        padding: 10px;
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+        font-size: 0.9rem;
+    }
 
-    <div class="form-check form-switch mb-3">
-        <input
-                checked
-                class="form-check-input"
-                id="autoRefreshSwitch"
-                type="checkbox"
-        />
-        <label class="form-check-label" for="autoRefreshSwitch">
-            Auto-refresh every 5 seconds
-        </label>
+    .card-header {
+        cursor: pointer;
+    }
+
+    .refresh-control {
+        float: right;
+        margin-bottom: 15px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-3">
+    <h2>Application Logs</h2>
+    <p>This page displays logs from various parts of the application.</p>
+
+    <div class="refresh-control">
+        <div class="form-check form-switch">
+            <input checked class="form-check-input" id="autoRefreshSwitch" type="checkbox"/>
+            <label class="form-check-label" for="autoRefreshSwitch">
+                Auto-refresh every 5 seconds
+            </label>
+        </div>
+        <button class="btn btn-sm btn-primary mt-2" id="refreshNowBtn">Refresh Now</button>
     </div>
 
-    {% for log_name, log_text in logs.items() %}
-    <div class="card mb-4">
-        <div class="card-header">
-            <strong>{{ log_name }} Logs</strong>
-        </div>
-        <div class="card-body">
-            <div class="scrollable-logs">
-                {{ log_text }}
+    <div class="accordion" id="logsAccordion">
+        {% for log_name, log_text in logs.items() %}
+        <div class="accordion-item mb-3">
+            <h2 class="accordion-header" id="heading{{ loop.index }}">
+                <button aria-controls="collapse{{ loop.index }}"
+                        aria-expanded="{% if loop.first %}true{% else %}false{% endif %}"
+                        class="accordion-button {% if not loop.first %}collapsed{% endif %}"
+                        data-bs-target="#collapse{{ loop.index }}"
+                        data-bs-toggle="collapse"
+                        type="button">
+                    <strong>{{ log_name }} Logs</strong>
+                </button>
+            </h2>
+            <div aria-labelledby="heading{{ loop.index }}"
+                 class="accordion-collapse collapse {% if loop.first %}show{% endif %}"
+                 data-bs-parent="#logsAccordion"
+                 id="collapse{{ loop.index }}">
+                <div class="accordion-body p-0">
+                    <div class="log-container">
+                        {% if log_text %}
+                        {{ log_text }}
+                        {% else %}
+                        <div class="alert alert-info m-3">No log entries found.</div>
+                        {% endif %}
+                    </div>
+                </div>
             </div>
         </div>
+        {% endfor %}
     </div>
-    {% endfor %}
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
+    // Auto-refresh functionality
     const autoRefreshSwitch = document.getElementById('autoRefreshSwitch');
-    let autoRefreshEnabled = true;
+    let autoRefreshEnabled = autoRefreshSwitch.checked;
+    let refreshInterval;
+
+    function setupAutoRefresh() {
+        if (refreshInterval) {
+            clearInterval(refreshInterval);
+        }
+
+        if (autoRefreshEnabled) {
+            refreshInterval = setInterval(() => {
+                window.location.reload();
+            }, 5000);
+        }
+    }
 
     autoRefreshSwitch.addEventListener('change', function () {
         autoRefreshEnabled = this.checked;
+        setupAutoRefresh();
     });
 
-    setInterval(() => {
-        if (autoRefreshEnabled) {
-            window.location.reload();
-        }
-    }, 5000);
+    // Manual refresh button
+    document.getElementById('refreshNowBtn').addEventListener('click', function () {
+        window.location.reload();
+    });
+
+    // Scroll log containers to bottom initially
+    document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('.log-container').forEach(container => {
+            container.scrollTop = container.scrollHeight;
+        });
+
+        // Setup auto-refresh
+        setupAutoRefresh();
+    });
 </script>
 {% endblock %}
