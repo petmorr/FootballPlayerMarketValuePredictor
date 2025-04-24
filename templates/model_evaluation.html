@@ -7,80 +7,93 @@
 
     <!-- Search Form -->
     <div class="card mb-4">
-        <div class="card-header bg-primary text-white">
-            <h5 class="mb-0">Search Player Data</h5>
+        <div aria-controls="searchFormCollapse" aria-expanded="true" class="card-header bg-primary text-white"
+             data-bs-target="#searchFormCollapse" data-bs-toggle="collapse" style="cursor: pointer;">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Search Player Data</h5>
+                <i class="fas fa-chevron-down"></i>
+            </div>
         </div>
-        <div class="card-body">
-            <form method="POST">
-                <div class="row">
-                    <div class="col-md-2 mb-3">
-                        <label class="form-label" for="model">Model</label>
-                        <select class="form-select" id="model" name="model">
-                            <option value="Linear Regression">Linear Regression</option>
-                            <option value="Random Forest">Random Forest</option>
-                            <option value="XGBoost">XGBoost</option>
-                        </select>
+        <div class="collapse show" id="searchFormCollapse">
+            <div class="card-body">
+                <form method="POST">
+                    <div class="row">
+                        <div class="col-md-2 mb-3">
+                            <label class="form-label" for="model">Model</label>
+                            <select class="form-select" id="model" name="model">
+                                <option value="Linear Regression">Linear Regression</option>
+                                <option value="Random Forest">Random Forest</option>
+                                <option value="XGBoost">XGBoost</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-2 mb-3">
+                            <label class="form-label" for="fe_variant">Feature Eng.</label>
+                            <select class="form-select" id="fe_variant" name="fe_variant">
+                                <option value="enhanced_feature_engineering">Enhanced</option>
+                                <option value="feature_engineering">Basic</option>
+                                <option value="no_feature_engineering">None</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label" for="league">League</label>
+                            <select class="form-select" id="league" name="league">
+                                <option value="Premier-League">Premier League</option>
+                                <option value="La-Liga">La Liga</option>
+                                <option value="Bundesliga">Bundesliga</option>
+                                <option value="Ligue-1">Ligue 1</option>
+                                <option value="Serie-A">Serie A</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label" for="season">Season</label>
+                            <select class="form-select" id="season" name="season">
+                                <option value="2019-2020">2019-2020</option>
+                                <option value="2020-2021">2020-2021</option>
+                                <option value="2021-2022">2021-2022</option>
+                                <option value="2022-2023">2022-2023</option>
+                                <option value="2023-2024">2023-2024</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-2 mb-3">
+                            <label class="form-label" for="view_type">View</label>
+                            <select class="form-select" id="view_type" name="view_type">
+                                <option value="Raw">Raw</option>
+                                <option value="Predicted">Predicted</option>
+                            </select>
+                        </div>
                     </div>
 
-                    <div class="col-md-2 mb-3">
-                        <label class="form-label" for="fe_variant">Feature Eng.</label>
-                        <select class="form-select" id="fe_variant" name="fe_variant">
-                            <option value="enhanced_feature_engineering">Enhanced</option>
-                            <option value="feature_engineering">Basic</option>
-                            <option value="no_feature_engineering">None</option>
-                        </select>
+                    <div class="mb-3">
+                        <label class="form-label" for="search_term">Player Name:</label>
+                        <input class="form-control" id="search_term" name="search_term" placeholder="e.g., Cole Palmer"
+                               type="text">
                     </div>
 
-                    <div class="col-md-3 mb-3">
-                        <label class="form-label" for="league">League</label>
-                        <select class="form-select" id="league" name="league">
-                            <option value="Premier-League">Premier League</option>
-                            <option value="La-Liga">La Liga</option>
-                            <option value="Bundesliga">Bundesliga</option>
-                            <option value="Ligue-1">Ligue 1</option>
-                            <option value="Serie-A">Serie A</option>
-                        </select>
-                    </div>
-
-                    <div class="col-md-3 mb-3">
-                        <label class="form-label" for="season">Season</label>
-                        <select class="form-select" id="season" name="season">
-                            <option value="2019-2020">2019-2020</option>
-                            <option value="2020-2021">2020-2021</option>
-                            <option value="2021-2022">2021-2022</option>
-                            <option value="2022-2023">2022-2023</option>
-                            <option value="2023-2024">2023-2024</option>
-                        </select>
-                    </div>
-
-                    <div class="col-md-2 mb-3">
-                        <label class="form-label" for="view_type">View</label>
-                        <select class="form-select" id="view_type" name="view_type">
-                            <option value="Raw">Raw</option>
-                            <option value="Predicted">Predicted</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div class="mb-3">
-                    <label class="form-label" for="search_term">Player Name:</label>
-                    <input class="form-control" id="search_term" name="search_term" placeholder="e.g., Cole Palmer"
-                           type="text">
-                </div>
-
-                <button class="btn btn-primary" type="submit">Search</button>
-            </form>
+                    <button class="btn btn-primary" type="submit">Search</button>
+                </form>
+            </div>
         </div>
     </div>
 
     <!-- Model Performance Metrics Cards -->
     {% if overall_metrics_plot %}
     <div class="card mb-4">
-        <div class="card-header bg-info text-white">
-            <h5 class="mb-0">Model Performance Comparison</h5>
+        <div aria-controls="performanceMetricsCollapse" aria-expanded="true"
+             class="card-header bg-info text-white" data-bs-target="#performanceMetricsCollapse"
+             data-bs-toggle="collapse" style="cursor: pointer;">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Model Performance Comparison</h5>
+                <i class="fas fa-chevron-down"></i>
+            </div>
         </div>
-        <div class="card-body text-center">
-            <img alt="Overall Metrics" class="img-fluid" src="data:image/png;base64,{{ overall_metrics_plot }}">
+        <div class="collapse show" id="performanceMetricsCollapse">
+            <div class="card-body text-center">
+                <img alt="Overall Metrics" class="img-fluid" src="data:image/png;base64,{{ overall_metrics_plot }}">
+            </div>
         </div>
     </div>
     {% endif %}
@@ -88,58 +101,215 @@
     <!-- Search Results -->
     {% if search_results %}
     <div class="card mb-4">
-        <div class="card-header bg-success text-white">
-            <h5 class="mb-0">Search Results</h5>
+        <div aria-controls="searchResultsCollapse" aria-expanded="true" class="card-header bg-success text-white"
+             data-bs-target="#searchResultsCollapse" data-bs-toggle="collapse" style="cursor: pointer;">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Search Results</h5>
+                <i class="fas fa-chevron-down"></i>
+            </div>
         </div>
-        <div class="card-body table-responsive">
-            {{ search_results|safe }}
+        <div class="collapse show" id="searchResultsCollapse">
+            <div class="card-body table-responsive">
+                {{ search_results|safe }}
+            </div>
         </div>
     </div>
     {% endif %}
 
-    <!-- Advanced Analysis Section -->
+    <!-- Top Absolute Difference Section -->
+    {% if interesting_abs %}
+    <div class="card mb-4">
+        <div aria-controls="topAbsDiffCollapse" aria-expanded="true" class="card-header bg-warning text-dark"
+             data-bs-target="#topAbsDiffCollapse" data-bs-toggle="collapse" style="cursor: pointer;">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Top 5 Absolute Differences</h5>
+                <i class="fas fa-chevron-down"></i>
+            </div>
+        </div>
+        <div class="collapse show" id="topAbsDiffCollapse">
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6 table-responsive">
+                        {{ interesting_abs|safe }}
+                    </div>
+                    {% if interesting_abs_plot %}
+                    <div class="col-md-6 text-center">
+                        <img alt="Top Absolute Differences" class="img-fluid"
+                             src="data:image/png;base64,{{ interesting_abs_plot }}">
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Top Percentage Difference Section -->
+    {% if interesting_pct %}
+    <div class="card mb-4">
+        <div aria-controls="topPctDiffCollapse" aria-expanded="true" class="card-header bg-warning text-dark"
+             data-bs-target="#topPctDiffCollapse" data-bs-toggle="collapse" style="cursor: pointer;">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Top 5 Percentage Differences</h5>
+                <i class="fas fa-chevron-down"></i>
+            </div>
+        </div>
+        <div class="collapse show" id="topPctDiffCollapse">
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6 table-responsive">
+                        {{ interesting_pct|safe }}
+                    </div>
+                    {% if interesting_pct_plot %}
+                    <div class="col-md-6 text-center">
+                        <img alt="Top Percentage Differences" class="img-fluid"
+                             src="data:image/png;base64,{{ interesting_pct_plot }}">
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Top Under-Valued Players Section -->
+    {% if top_under_valued_table %}
+    <div class="card mb-4">
+        <div aria-controls="underValuedCollapse" aria-expanded="true" class="card-header bg-danger text-white"
+             data-bs-target="#underValuedCollapse" data-bs-toggle="collapse" style="cursor: pointer;">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Top 5 Under-Valued Players</h5>
+                <i class="fas fa-chevron-down"></i>
+            </div>
+        </div>
+        <div class="collapse show" id="underValuedCollapse">
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6 table-responsive">
+                        {{ top_under_valued_table|safe }}
+                    </div>
+                    {% if interesting_under_plot %}
+                    <div class="col-md-6 text-center">
+                        <img alt="Under-Valued Players" class="img-fluid"
+                             src="data:image/png;base64,{{ interesting_under_plot }}">
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Top Over-Valued Players Section -->
+    {% if top_over_valued_table %}
+    <div class="card mb-4">
+        <div aria-controls="overValuedCollapse" aria-expanded="true" class="card-header bg-success text-white"
+             data-bs-target="#overValuedCollapse" data-bs-toggle="collapse" style="cursor: pointer;">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Top 5 Over-Valued Players</h5>
+                <i class="fas fa-chevron-down"></i>
+            </div>
+        </div>
+        <div class="collapse show" id="overValuedCollapse">
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6 table-responsive">
+                        {{ top_over_valued_table|safe }}
+                    </div>
+                    {% if interesting_over_plot %}
+                    <div class="col-md-6 text-center">
+                        <img alt="Over-Valued Players" class="img-fluid"
+                             src="data:image/png;base64,{{ interesting_over_plot }}">
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Market Value vs Prediction Scatter Plot -->
     {% if scatter_plot %}
     <div class="card mb-4">
-        <div class="card-header bg-warning text-dark">
-            <h5 class="mb-0">Market Value vs Prediction</h5>
+        <div aria-controls="scatterPlotCollapse" aria-expanded="true" class="card-header bg-warning text-dark"
+             data-bs-target="#scatterPlotCollapse" data-bs-toggle="collapse" style="cursor: pointer;">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Market Value vs Prediction</h5>
+                <i class="fas fa-chevron-down"></i>
+            </div>
         </div>
-        <div class="card-body text-center">
-            <img alt="Scatter Plot" class="img-fluid" src="data:image/png;base64,{{ scatter_plot }}">
+        <div class="collapse show" id="scatterPlotCollapse">
+            <div class="card-body text-center">
+                <img alt="Scatter Plot" class="img-fluid" src="data:image/png;base64,{{ scatter_plot }}">
+            </div>
         </div>
     </div>
     {% endif %}
 
+    <!-- Error Distribution Plot -->
     {% if error_dist_plot %}
     <div class="card mb-4">
-        <div class="card-header bg-warning text-dark">
-            <h5 class="mb-0">Error Distribution</h5>
+        <div aria-controls="errorDistCollapse" aria-expanded="true" class="card-header bg-warning text-dark"
+             data-bs-target="#errorDistCollapse" data-bs-toggle="collapse" style="cursor: pointer;">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Error Distribution</h5>
+                <i class="fas fa-chevron-down"></i>
+            </div>
         </div>
-        <div class="card-body text-center">
-            <img alt="Error Distribution" class="img-fluid" src="data:image/png;base64,{{ error_dist_plot }}">
+        <div class="collapse show" id="errorDistCollapse">
+            <div class="card-body text-center">
+                <img alt="Error Distribution" class="img-fluid" src="data:image/png;base64,{{ error_dist_plot }}">
+            </div>
         </div>
     </div>
     {% endif %}
 
     <!-- Available Prediction Files -->
     <div class="card mb-4">
-        <div class="card-header bg-dark text-white">
-            <h5 class="mb-0">Available Prediction Files</h5>
+        <div aria-controls="availablePredictionsCollapse" aria-expanded="true"
+             class="card-header bg-dark text-white" data-bs-target="#availablePredictionsCollapse"
+             data-bs-toggle="collapse" style="cursor: pointer;">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Available Prediction Files</h5>
+                <i class="fas fa-chevron-down"></i>
+            </div>
         </div>
-        <div class="card-body">
-            {% for model_name, fe_variants in predictions.items() %}
-            <h5>{{ model_name }}</h5>
-            {% for fe_variant, league_dict in fe_variants.items() %}
-            <h6>{{ fe_variant }}</h6>
-            <ul class="list-group mb-3">
-                {% for league_season, link in league_dict.items() %}
-                <li class="list-group-item">
-                    <a href="{{ link }}">{{ league_season }}</a>
-                </li>
+        <div class="collapse show" id="availablePredictionsCollapse">
+            <div class="card-body">
+                {% for model_name, fe_variants in predictions.items() %}
+                <h5>{{ model_name }}</h5>
+                {% for fe_variant, league_dict in fe_variants.items() %}
+                <h6>{{ fe_variant }}</h6>
+                <ul class="list-group mb-3">
+                    {% for league_season, link in league_dict.items() %}
+                    <li class="list-group-item">
+                        <a href="{{ link }}">{{ league_season }}</a>
+                    </li>
+                    {% endfor %}
+                </ul>
                 {% endfor %}
-            </ul>
-            {% endfor %}
-            {% endfor %}
+                {% endfor %}
+            </div>
         </div>
     </div>
 </div>
+
+<!-- Make sure Font Awesome is included in your base template or add this line -->
+<script>
+    // Optional - You can add this JavaScript to toggle the chevron icon direction
+    document.querySelectorAll('[data-bs-toggle="collapse"]').forEach(element => {
+        element.addEventListener('click', function () {
+            const icon = this.querySelector('i');
+            if (icon) {
+                if (this.getAttribute('aria-expanded') === 'true') {
+                    icon.classList.remove('fa-chevron-up');
+                    icon.classList.add('fa-chevron-down');
+                } else {
+                    icon.classList.remove('fa-chevron-down');
+                    icon.classList.add('fa-chevron-up');
+                }
+            }
+        });
+    });
+</script>
 {% endblock %}
