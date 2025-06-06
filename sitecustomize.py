@@ -11,11 +11,18 @@ except Exception:
 
 # Ensure python-dateutil uses timezone-aware epoch to avoid deprecation warnings.
 try:
-    from dateutil import tz
+    import importlib
+
+    _orig = datetime.datetime.utcfromtimestamp
+    datetime.datetime.utcfromtimestamp = lambda ts=0: datetime.datetime.fromtimestamp(ts, datetime.UTC)
+    try:
+        tz_mod = importlib.import_module("dateutil.tz.tz")
+    finally:
+        datetime.datetime.utcfromtimestamp = _orig
 
     _epoch = datetime.datetime.fromtimestamp(0, datetime.UTC)
-    tz.tz.EPOCH = _epoch
-    tz.tz.EPOCHORDINAL = _epoch.toordinal()
+    tz_mod.EPOCH = _epoch
+    tz_mod.EPOCHORDINAL = _epoch.toordinal()
 except Exception:
     pass
 
