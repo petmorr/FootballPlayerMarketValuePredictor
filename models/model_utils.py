@@ -226,7 +226,10 @@ def predict_on_file(
     logger.info(f"Saved predictions to: {output_file}")
 
 
-import cupy as cp  # GPU acceleration for XGB
+try:
+    import cupy as cp  # GPU acceleration for XGB
+except Exception:  # pragma: no cover - optional dependency
+    cp = None
 from xgboost import XGBRegressor, DMatrix
 
 
