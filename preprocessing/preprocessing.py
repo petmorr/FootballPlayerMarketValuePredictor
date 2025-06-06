@@ -107,10 +107,13 @@ def handle_missing_data(df: pd.DataFrame) -> pd.DataFrame:
     threshold = int(0.3 * len(df))
     df.dropna(thresh=threshold, axis=1, inplace=True)
     for col in df.select_dtypes(include=[np.number]).columns:
+        if df[col].dropna().empty:
+            continue
         df[col] = df[col].fillna(df[col].median())
     for col in df.select_dtypes(include=['object', 'category']).columns:
-        if not df[col].isnull().all():
-            df[col] = df[col].fillna(df[col].mode()[0])
+        if df[col].dropna().empty:
+            continue
+        df[col] = df[col].fillna(df[col].mode(dropna=True)[0])
     return df
 
 

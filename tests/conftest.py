@@ -15,6 +15,17 @@ from typing import Generator
 import sys
 import warnings
 
+warnings.filterwarnings(
+    "ignore",
+    message="datetime.datetime.utcfromtimestamp() is deprecated",
+    category=DeprecationWarning,
+)
+warnings.filterwarnings(
+    "ignore",
+    category=DeprecationWarning,
+    module=r"_pytest.assertion.rewrite",
+)
+
 import pytest
 
 import logging
@@ -37,7 +48,7 @@ def _quiet_external_loggers() -> None:
         logging.getLogger(name).setLevel(logging.CRITICAL)
     warnings.filterwarnings(
         "ignore",
-        message="datetime.datetime.utcfromtimestamp\(\) is deprecated",
+        message="datetime.datetime.utcfromtimestamp() is deprecated",
         category=DeprecationWarning,
     )
 
