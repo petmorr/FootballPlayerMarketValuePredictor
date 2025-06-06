@@ -412,7 +412,7 @@ def process_all_files(input_folder) -> None:
     For every CSV under input_folder (Path or str), call process_single_file.
     """
     base = Path(input_folder)
-    csv_paths = [f.name for f in base.glob("*.csv")]
+    csv_paths = [str(f) for f in base.glob("*.csv")]
 
     with Pool(processes=os.cpu_count()) as pool:
         # pass the full path into process_single_file
