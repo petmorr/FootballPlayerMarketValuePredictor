@@ -8,6 +8,7 @@ import re
 from multiprocessing import Pool
 from pathlib import Path
 from typing import List
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -267,17 +268,23 @@ def aggregate_duplicate_players(df: pd.DataFrame, weight_col: str = "minutes_pla
 
     def agg_func(grp: pd.DataFrame) -> pd.Series:
         result = {}
+        name = grp.name
+        if not isinstance(name, tuple):
+            name = (name,)
+        for col, val in zip(group_cols, name):
+            result[col] = val
+
         try:
             weights = pd.to_numeric(grp[weight_col], errors='coerce').fillna(0)
         except Exception:
             weights = pd.Series(np.ones(len(grp)), index=grp.index)
 
-        for col in grp.columns:
-            if col in group_cols:
-                result[col] = grp.iloc[0][col]
-            elif col == weight_col:
+        non_group_cols = [c for c in df.columns if c not in group_cols]
+        for col in non_group_cols:
+            if col == weight_col:
                 result[col] = weights.sum()
-            elif pd.api.types.is_numeric_dtype(grp[col]) or grp[col].dtype == object:
+                continue
+            if pd.api.types.is_numeric_dtype(grp[col]) or grp[col].dtype == object:
                 try:
                     vals = pd.to_numeric(grp[col], errors='coerce')
                     if vals.isnull().all():
@@ -309,7 +316,11 @@ def aggregate_duplicate_players(df: pd.DataFrame, weight_col: str = "minutes_pla
                     result[col] = None
         return pd.Series(result)
 
-    agg_df = df.groupby(group_cols, as_index=False).apply(agg_func).reset_index(drop=True)
+    agg_df = (
+        df.groupby(group_cols, as_index=False)
+        .apply(agg_func, include_groups=False)
+        .reset_index(drop=True)
+    )
     agg_df.sort_values(by="player", inplace=True)
     agg_df.reset_index(drop=True, inplace=True)
     agg_df.insert(0, "rank", agg_df.index + 1)
@@ -321,7 +332,13 @@ def preprocess_file(file_path: Path, league: str, season: str) -> None:
     try:
         logger.info(f"Processing: {file_path}")
         try:
-            df = pd.read_csv(file_path, header=[0, 1])
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore",
+                    "Length of header or names does not match",
+                    category=pd.errors.ParserWarning,
+                )
+                df = pd.read_csv(file_path, header=[0, 1])
             df = flatten_columns(df)
             df = normalize_column_names(df)
             df = standardize_country_column(df)
@@ -346,11 +363,11 @@ def preprocess_file(file_path: Path, league: str, season: str) -> None:
 
         df = remove_header_rows(df)
         df.drop_duplicates(subset=['player', 'squad', 'season'], inplace=True)
+        df['league'] = league
+        df['season'] = season
         df = aggregate_duplicate_players(df, weight_col="minutes_played")
         df = ensure_data_types(df)
         df = handle_missing_data(df)
-        df['league'] = league
-        df['season'] = season
 
         # Enhanced
         df_enhanced = df.copy()
