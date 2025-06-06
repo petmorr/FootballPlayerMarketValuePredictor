@@ -2,3 +2,8 @@
 .venv/
 data/
 logging/
+.idea/
+__pycache__/
+.pytest_cache/
+dist/
+build/
