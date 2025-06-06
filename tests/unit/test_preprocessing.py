@@ -315,8 +315,10 @@ def test_process_all_files(tmp_path, monkeypatch):
             for item in iterable:
                 func(item)
 
-    monkeypatch.setattr('preprocessing.preprocessing.process_single_file', mock_process_single_file)
-    monkeypatch.setattr('preprocessing.preprocessing.Pool', DummyPool)
+    import preprocessing.preprocessing as pp
+
+    monkeypatch.setattr(pp, 'process_single_file', mock_process_single_file)
+    monkeypatch.setattr(pp, 'Pool', DummyPool)
 
     from preprocessing.preprocessing import process_all_files
     process_all_files(tmp_path)

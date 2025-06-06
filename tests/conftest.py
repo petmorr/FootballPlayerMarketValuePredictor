@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Generator
+import sys
 
 import pytest
 
@@ -22,6 +23,8 @@ import logging
 # ---------------------------------------------------------------------------#
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = PROJECT_ROOT / "tests" / "_sample_data"
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 
 # ---------------------------------------------------------------------------#
@@ -58,6 +61,8 @@ def _patch_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Generator[Non
     """
     monkeypatch.setenv("DATA_ROOT", str(tmp_path))
     monkeypatch.setenv("API_BASE_URL", "http://localhost:9999")
+    # Ensure project root is on sys.path for imports
+    monkeypatch.syspath_prepend(str(PROJECT_ROOT))
     yield
 
 
