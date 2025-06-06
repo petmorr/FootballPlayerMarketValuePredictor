@@ -18,14 +18,23 @@ import matplotlib.pyplot as plt
 
 from logging_config import configure_logger
 
-def ensure_module(module_name: str, package_name: str = None) -> None:
-    """Ensures a Python module is installed."""
+def ensure_module(module_name: str, package_name: str | None = None) -> None:
+    """Ensures that a Python module is available.
+
+    This function only verifies the import and raises a helpful error if the
+    module cannot be imported.  All required third‑party packages should be
+    listed in ``requirements.txt`` and installed prior to running the
+    application.
+    """
     try:
         __import__(module_name)
-    except ImportError:
+    except ImportError as exc:
         pkg = package_name if package_name else module_name
-        subprocess.check_call([sys.executable, "-m", "pip", "install", pkg])
-        __import__(module_name)
+        raise ImportError(
+            f"Required module '{module_name}' is missing. Install the project"
+            f" dependencies (e.g. `pip install -r requirements.txt`) to get"
+            f" '{pkg}'."
+        ) from exc
 
 
 # Ensure required modules
