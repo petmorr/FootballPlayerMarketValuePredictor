@@ -287,3 +287,38 @@ def test_large_csv_performance():
 
     # Should return same size as no duplicates
     assert len(result) == 500, "Should return same number of rows when no duplicates"
+
+
+# New test for process_all_files
+def test_process_all_files(tmp_path, monkeypatch):
+    """Ensure full file paths are passed to process_single_file."""
+    # Create temporary CSV files
+    csv1 = tmp_path / "a.csv"
+    csv1.write_text("player\nA")
+    csv2 = tmp_path / "b.csv"
+    csv2.write_text("player\nB")
+
+    called_paths = []
+
+    def mock_process_single_file(path):
+        called_paths.append(str(path))
+        return pd.DataFrame()
+
+    class DummyPool:
+        def __init__(self, *args, **kwargs):
+            pass
+        def __enter__(self):
+            return self
+        def __exit__(self, exc_type, exc, tb):
+            pass
+        def map(self, func, iterable):
+            for item in iterable:
+                func(item)
+
+    monkeypatch.setattr('preprocessing.preprocessing.process_single_file', mock_process_single_file)
+    monkeypatch.setattr('preprocessing.preprocessing.Pool', DummyPool)
+
+    from preprocessing.preprocessing import process_all_files
+    process_all_files(tmp_path)
+
+    assert set(called_paths) == {str(csv1), str(csv2)}
