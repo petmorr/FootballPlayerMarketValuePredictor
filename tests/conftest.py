@@ -15,17 +15,6 @@ from typing import Generator
 import sys
 import warnings
 
-warnings.filterwarnings(
-    "ignore",
-    message="datetime.datetime.utcfromtimestamp() is deprecated",
-    category=DeprecationWarning,
-)
-warnings.filterwarnings(
-    "ignore",
-    category=DeprecationWarning,
-    module=r"_pytest.assertion.rewrite",
-)
-
 import pytest
 
 import logging
