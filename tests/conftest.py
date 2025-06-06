@@ -13,6 +13,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Generator
 import sys
+import warnings
 
 import pytest
 
@@ -34,6 +35,11 @@ if str(PROJECT_ROOT) not in sys.path:
 def _quiet_external_loggers() -> None:
     for name in ("urllib3", "selenium", "requests"):
         logging.getLogger(name).setLevel(logging.CRITICAL)
+    warnings.filterwarnings(
+        "ignore",
+        message="datetime.datetime.utcfromtimestamp\(\) is deprecated",
+        category=DeprecationWarning,
+    )
 
 
 # ---------------------------------------------------------------------------#
