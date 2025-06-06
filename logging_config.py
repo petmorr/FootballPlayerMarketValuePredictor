@@ -41,8 +41,8 @@ def configure_logger(name: str, log_file: str, level: int = logging.DEBUG) -> lo
         # ------------------------------------------------------------------------------
         # File Handler Setup
         # ------------------------------------------------------------------------------
-        # Create a file handler that writes to the log file with UTF-16 encoding.
-        file_handler = logging.FileHandler(log_file_path, mode="a", encoding="utf-16")
+        # Create a file handler that writes to the log file with UTF-8 encoding.
+        file_handler = logging.FileHandler(log_file_path, mode="a", encoding="utf-8")
         file_handler.setLevel(level)
         # Define a common log message format.
         file_formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
